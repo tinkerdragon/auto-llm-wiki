@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "minAppVersion": "1.5.0",
   "description": "Maintain a Karpathy-style LLM Wiki with AI-assisted ingest, query, lint, and previewed file changes.",
-  "author": "Claude",
+  "author": "youzhixiaomutou",
   "isDesktopOnly": false
 }

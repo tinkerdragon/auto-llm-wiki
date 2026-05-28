@@ -124,6 +124,12 @@ The plugin asks the model to look for stale claims, contradictions, orphan pages
 - Proposed file changes must be reviewed before applying.
 - Raw file state is updated only after Apply succeeds.
 
+## Privacy and network use
+
+This plugin sends selected vault content to the OpenAI-compatible chat completions endpoint configured in the plugin settings. During ingest, it sends new or changed raw Markdown source files plus wiki index/log context. During query and lint commands, it sends relevant wiki context. No network request is made until you configure an API URL and API key and run a command.
+
+The plugin does not include telemetry, analytics, ads, or a self-update mechanism.
+
 ## Development
 
 Run tests:
