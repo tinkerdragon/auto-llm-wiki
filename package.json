@@ -1,6 +1,6 @@
 {
   "name": "llm-wiki",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Obsidian plugin for maintaining an LLM Wiki.",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,11 @@
     "dev": "node esbuild.config.mjs",
     "test": "jest --runInBand"
   },
-  "keywords": ["obsidian", "llm", "wiki"],
+  "keywords": [
+    "obsidian",
+    "llm",
+    "wiki"
+  ],
   "author": "youzhixiaomutou",
   "license": "MIT",
   "devDependencies": {
