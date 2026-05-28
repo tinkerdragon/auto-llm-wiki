@@ -29,7 +29,7 @@ export class OpenAIProvider implements LLMProvider {
         body: JSON.stringify({
           model: request.model,
           messages: [
-            { role: "system", content: "You are a careful Obsidian LLM Wiki maintainer. Return strict JSON only." },
+            { role: "system", content: "You are a careful Auto LLM Wiki maintainer. Return strict JSON only." },
             { role: "user", content: request.prompt }
           ],
           temperature: 0.2

@@ -34,7 +34,7 @@ export class ChangePlanPreviewModal extends Modal {
       padding: "28px 32px 22px",
       "border-bottom": "1px solid var(--background-modifier-border)"
     });
-    hero.createEl("h2", { text: "Review LLM Wiki changes" });
+    hero.createEl("h2", { text: "Review Auto LLM Wiki changes" });
     hero.createEl("p", { text: this.plan.summary || "No summary provided by the model." });
 
     const stats = hero.createDiv();
@@ -109,19 +109,19 @@ export class ChangePlanPreviewModal extends Modal {
     applyButton.addClass("mod-cta");
     applyButton.onclick = async () => {
       applyButton.disabled = true;
-      this.updateStatus("LLM Wiki: applying changes...");
-      new Notice("LLM Wiki: applying changes...");
+      this.updateStatus("Auto LLM Wiki: applying changes...");
+      new Notice("Auto LLM Wiki: applying changes...");
       try {
         await applyChangePlan(this.app, this.plan);
         await this.onApplySuccess();
-        this.updateStatus("LLM Wiki: applied");
-        new Notice("LLM Wiki changes applied.");
+        this.updateStatus("Auto LLM Wiki: applied");
+        new Notice("Auto LLM Wiki changes applied.");
         this.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
         applyButton.disabled = false;
-        this.updateStatus(`LLM Wiki: error - ${message}`);
-        new Notice(`Failed to apply LLM Wiki changes: ${message}`);
+        this.updateStatus(`Auto LLM Wiki: error - ${message}`);
+        new Notice(`Failed to apply Auto LLM Wiki changes: ${message}`);
       }
     };
     const cancelButton = actions.createEl("button", { text: "Cancel" });

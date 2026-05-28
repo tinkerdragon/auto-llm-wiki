@@ -16,24 +16,24 @@ export default class LLMWikiPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.statusBarItem = this.addStatusBarItem();
-    this.setStatus("LLM Wiki: idle");
+    this.setStatus("Auto LLM Wiki: idle");
     this.addSettingTab(new LLMWikiSettingTab(this.app, this));
 
     this.addCommand({
       id: "ingest-active-source",
-      name: "Ingest active source into LLM Wiki",
+      name: "Ingest active source into Auto LLM Wiki",
       callback: () => this.ingestActiveSource()
     });
 
     this.addCommand({
       id: "query-wiki",
-      name: "Query LLM Wiki",
+      name: "Query Auto LLM Wiki",
       callback: () => this.queryWiki()
     });
 
     this.addCommand({
       id: "lint-wiki",
-      name: "Lint LLM Wiki",
+      name: "Lint Auto LLM Wiki",
       callback: () => this.lintWiki()
     });
   }
@@ -53,17 +53,17 @@ export default class LLMWikiPlugin extends Plugin {
   }
 
   private async ingestActiveSource(): Promise<void> {
-    this.setStatus("LLM Wiki: scanning raw folder for changes...");
-    new Notice("LLM Wiki: scanning raw folder for changes...");
+    this.setStatus("Auto LLM Wiki: scanning raw folder for changes...");
+    new Notice("Auto LLM Wiki: scanning raw folder for changes...");
     const changedRawFiles = await findChangedRawFiles(this.app, this.settings, this.rawFileState);
     if (changedRawFiles.length === 0) {
-      this.setStatus("LLM Wiki: no raw changes");
-      new Notice("LLM Wiki: no new or changed raw files.");
+      this.setStatus("Auto LLM Wiki: no raw changes");
+      new Notice("Auto LLM Wiki: no new or changed raw files.");
       return;
     }
 
-    this.setStatus("LLM Wiki: reading vault context...");
-    new Notice("LLM Wiki: reading vault context...");
+    this.setStatus("Auto LLM Wiki: reading vault context...");
+    new Notice("Auto LLM Wiki: reading vault context...");
     const prompt = buildIngestPrompt({
       index: await readTextFile(this.app, this.settings.indexPath),
       log: await readTextFile(this.app, this.settings.logPath),
@@ -76,10 +76,10 @@ export default class LLMWikiPlugin extends Plugin {
   }
 
   private async queryWiki(): Promise<void> {
-    const question = window.prompt("Ask the LLM Wiki a question");
+    const question = window.prompt("Ask the Auto LLM Wiki a question");
     if (!question) return;
-    this.setStatus("LLM Wiki: reading vault context...");
-    new Notice("LLM Wiki: reading vault context...");
+    this.setStatus("Auto LLM Wiki: reading vault context...");
+    new Notice("Auto LLM Wiki: reading vault context...");
     const wikiPages = await listMarkdownFiles(this.app, this.settings.wikiFolder);
     const prompt = buildQueryPrompt({
       index: await readTextFile(this.app, this.settings.indexPath),
@@ -91,8 +91,8 @@ export default class LLMWikiPlugin extends Plugin {
   }
 
   private async lintWiki(): Promise<void> {
-    this.setStatus("LLM Wiki: reading vault context...");
-    new Notice("LLM Wiki: reading vault context...");
+    this.setStatus("Auto LLM Wiki: reading vault context...");
+    new Notice("Auto LLM Wiki: reading vault context...");
     const wikiPages = await listMarkdownFiles(this.app, this.settings.wikiFolder);
     const prompt = buildLintPrompt({
       index: await readTextFile(this.app, this.settings.indexPath),
@@ -104,12 +104,12 @@ export default class LLMWikiPlugin extends Plugin {
 
   private async runPrompt(prompt: string, onApplySuccess?: () => Promise<void>): Promise<void> {
     if (!this.settings.openAIApiKey) {
-      new Notice("Set your OpenAI API key in Obsidian LLM Wiki settings.");
+      new Notice("Set your OpenAI API key in Auto LLM Wiki settings.");
       return;
     }
     try {
-      this.setStatus("LLM Wiki: waiting for model response...");
-      new Notice("LLM Wiki: waiting for model response...");
+      this.setStatus("Auto LLM Wiki: waiting for model response...");
+      new Notice("Auto LLM Wiki: waiting for model response...");
       const provider = new OpenAIProvider();
       const response = await provider.complete({
         apiKey: this.settings.openAIApiKey,
@@ -117,15 +117,15 @@ export default class LLMWikiPlugin extends Plugin {
         model: this.settings.openAIModel,
         prompt
       });
-      this.setStatus("LLM Wiki: validating proposed changes...");
-      new Notice("LLM Wiki: validating proposed changes...");
+      this.setStatus("Auto LLM Wiki: validating proposed changes...");
+      new Notice("Auto LLM Wiki: validating proposed changes...");
       const plan = validateChangePlan(parseChangePlan(response), this.settings);
-      this.setStatus("LLM Wiki: review proposed changes");
-      new Notice("LLM Wiki: review proposed changes.");
+      this.setStatus("Auto LLM Wiki: review proposed changes");
+      new Notice("Auto LLM Wiki: review proposed changes.");
       new ChangePlanPreviewModal(this.app, plan, (message) => this.setStatus(message), onApplySuccess).open();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "LLM Wiki request failed.";
-      this.setStatus(`LLM Wiki: error - ${message}`);
+      const message = error instanceof Error ? error.message : "Auto LLM Wiki request failed.";
+      this.setStatus(`Auto LLM Wiki: error - ${message}`);
       new Notice(message);
     }
   }

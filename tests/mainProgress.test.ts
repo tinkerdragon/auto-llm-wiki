@@ -16,7 +16,7 @@ test("onload initializes persistent status bar as idle", async () => {
 
   await plugin.onload();
 
-  expect(plugin.statusBarItems[0].text).toBe("LLM Wiki: idle");
+  expect(plugin.statusBarItems[0].text).toBe("Auto LLM Wiki: idle");
 });
 
 test("ingest command updates persistent status bar for each long-running stage", async () => {
@@ -53,18 +53,18 @@ test("ingest command updates persistent status bar for each long-running stage",
   await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
 
   expect(plugin.statusBarItems[0].history).toEqual([
-    "LLM Wiki: scanning raw folder for changes...",
-    "LLM Wiki: reading vault context...",
-    "LLM Wiki: waiting for model response...",
-    "LLM Wiki: validating proposed changes...",
-    "LLM Wiki: review proposed changes"
+    "Auto LLM Wiki: scanning raw folder for changes...",
+    "Auto LLM Wiki: reading vault context...",
+    "Auto LLM Wiki: waiting for model response...",
+    "Auto LLM Wiki: validating proposed changes...",
+    "Auto LLM Wiki: review proposed changes"
   ]);
   expect(notices).toEqual([
-    "LLM Wiki: scanning raw folder for changes...",
-    "LLM Wiki: reading vault context...",
-    "LLM Wiki: waiting for model response...",
-    "LLM Wiki: validating proposed changes...",
-    "LLM Wiki: review proposed changes."
+    "Auto LLM Wiki: scanning raw folder for changes...",
+    "Auto LLM Wiki: reading vault context...",
+    "Auto LLM Wiki: waiting for model response...",
+    "Auto LLM Wiki: validating proposed changes...",
+    "Auto LLM Wiki: review proposed changes."
   ]);
 });
 

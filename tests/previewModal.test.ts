@@ -45,7 +45,7 @@ test("renders a polished card-based review layout", () => {
     "llm-wiki-action-bar"
   ]));
   expect(contentEl.texts).toEqual(expect.arrayContaining([
-    "Review LLM Wiki changes",
+    "Review Auto LLM Wiki changes",
     "Integrate source notes",
     "2 proposed file changes",
     "1 create",
@@ -66,7 +66,7 @@ test("shows an empty-plan explanation when there are no proposed operations", ()
   modal.onOpen();
   const contentEl = modal.contentEl as unknown as { texts: string[] };
 
-  expect(contentEl.texts).toContain("Review LLM Wiki changes");
+  expect(contentEl.texts).toContain("Review Auto LLM Wiki changes");
   expect(contentEl.texts).toContain("No file changes were proposed by the model.");
   expect(contentEl.texts).toContain("0 proposed file changes");
 });
@@ -89,7 +89,7 @@ test("updates status while applying changes and after success", async () => {
   const contentEl = modal.contentEl as unknown as { buttons: Array<{ onclick: () => Promise<void> }> };
   await contentEl.buttons[0].onclick();
 
-  expect(statuses).toEqual(["LLM Wiki: applying changes...", "LLM Wiki: applied"]);
+  expect(statuses).toEqual(["Auto LLM Wiki: applying changes...", "Auto LLM Wiki: applied"]);
 });
 
 test("updates status when applying changes fails", async () => {
@@ -113,8 +113,8 @@ test("updates status when applying changes fails", async () => {
   await contentEl.buttons[0].onclick();
 
   expect(statuses).toEqual([
-    "LLM Wiki: applying changes...",
-    "LLM Wiki: error - Folder does not exist"
+    "Auto LLM Wiki: applying changes...",
+    "Auto LLM Wiki: error - Folder does not exist"
   ]);
 });
 
@@ -137,5 +137,5 @@ test("shows an error notice when applying changes fails", async () => {
   const contentEl = modal.contentEl as unknown as { buttons: Array<{ onclick: () => Promise<void> }> };
   await contentEl.buttons[0].onclick();
 
-  expect(notices).toContain("Failed to apply LLM Wiki changes: Folder does not exist");
+  expect(notices).toContain("Failed to apply Auto LLM Wiki changes: Folder does not exist");
 });
