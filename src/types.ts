@@ -1,0 +1,43 @@
+export type LLMProviderId = "openai";
+
+export type RawFileState = Record<string, string>;
+
+export interface LLMWikiPluginData {
+  rawFileState?: RawFileState;
+}
+
+export interface LLMWikiSettings {
+  rawFolder: string;
+  wikiFolder: string;
+  assetsFolder: string;
+  indexPath: string;
+  logPath: string;
+  provider: LLMProviderId;
+  openAIApiUrl: string;
+  openAIApiKey: string;
+  openAIModel: string;
+}
+
+export type FileOperationKind = "create" | "update" | "append";
+
+export interface FileOperation {
+  kind: FileOperationKind;
+  path: string;
+  content: string;
+  rationale: string;
+}
+
+export interface ChangePlan {
+  summary: string;
+  operations: FileOperation[];
+}
+
+export interface WikiContext {
+  index: string;
+  log: string;
+  sourcePath?: string;
+  sourceContent?: string;
+  sources?: Array<{ path: string; content: string }>;
+  question?: string;
+  wikiPages?: Array<{ path: string; content: string }>;
+}

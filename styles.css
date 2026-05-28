@@ -1,0 +1,163 @@
+.modal.llm-wiki-review-modal-shell {
+  width: min(1120px, 96vw);
+  max-width: 1120px;
+}
+
+.modal.llm-wiki-review-modal-shell .modal-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.llm-wiki-review-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-height: min(820px, 88vh);
+}
+
+.llm-wiki-review-hero {
+  padding: 28px 32px 22px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background:
+    radial-gradient(circle at top left, rgba(var(--interactive-accent-rgb), 0.18), transparent 34%),
+    linear-gradient(135deg, var(--background-secondary), var(--background-primary));
+}
+
+.llm-wiki-review-hero h2 {
+  margin: 0 0 10px 0;
+  font-size: 1.65rem;
+  letter-spacing: -0.035em;
+}
+
+.llm-wiki-review-hero p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.llm-wiki-review-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.llm-wiki-stat-chip,
+.llm-wiki-path-pill,
+.llm-wiki-operation-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.llm-wiki-stat-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+}
+
+.llm-wiki-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 220px;
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  padding: 20px 32px;
+  background: var(--background-secondary-alt);
+}
+
+.llm-wiki-operation-card {
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background: var(--background-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.llm-wiki-operation-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.llm-wiki-operation-badge {
+  padding: 5px 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.llm-wiki-operation-create {
+  background: var(--color-green);
+}
+
+.llm-wiki-operation-update {
+  background: var(--color-blue);
+}
+
+.llm-wiki-operation-append {
+  background: var(--color-purple);
+}
+
+.llm-wiki-path-pill {
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.llm-wiki-operation-card p {
+  margin: 0 0 10px 0;
+  color: var(--text-muted);
+}
+
+.llm-wiki-code-preview {
+  max-height: 380px;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--code-background);
+  color: var(--code-normal);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.llm-wiki-empty-state {
+  padding: 32px 18px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.llm-wiki-action-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 32px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.llm-wiki-action-bar button {
+  min-width: 112px;
+}
