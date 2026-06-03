@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 import { ChangePlan, FileOperation, LLMWikiSettings } from "./types";
 
-const ALLOWED_KINDS = new Set(["create", "update", "append"]);
+const ALLOWED_KINDS = new Set(["create", "update", "append", "prepend"]);
 
 export function parseChangePlan(text: string): ChangePlan {
   const json = stripFences(text.trim());

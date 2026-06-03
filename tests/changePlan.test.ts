@@ -51,6 +51,17 @@ test("accepts index and log paths", () => {
   expect(validateChangePlan(plan, DEFAULT_SETTINGS)).toEqual(plan);
 });
 
+test("parses and validates prepend operations for newest-first logs", () => {
+  const plan = parseChangePlan(JSON.stringify({
+    summary: "log latest change",
+    operations: [
+      { kind: "prepend", path: "wiki/log.md", content: "2026-06-03 latest", rationale: "record latest first" }
+    ]
+  }));
+
+  expect(validateChangePlan(plan, DEFAULT_SETTINGS)).toEqual(plan);
+});
+
 test("rejects configured index path outside wiki folder", () => {
   const plan = parseChangePlan(JSON.stringify({
     summary: "bad",

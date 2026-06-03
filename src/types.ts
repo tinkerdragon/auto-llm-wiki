@@ -16,9 +16,11 @@ export interface LLMWikiSettings {
   openAIApiUrl: string;
   openAIApiKey: string;
   openAIModel: string;
+  autoIngestEnabled: boolean;
+  autoIngestDebounceMs: number;
 }
 
-export type FileOperationKind = "create" | "update" | "append";
+export type FileOperationKind = "create" | "update" | "append" | "prepend";
 
 export interface FileOperation {
   kind: FileOperationKind;
