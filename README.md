@@ -6,8 +6,8 @@ Auto LLM Wiki is an Obsidian plugin for maintaining a Karpathy-style LLM Wiki. I
 
 ## Features
 
-- Scan the configured raw source folder for new or changed Markdown and PDF files.
-- Extract text-layer PDFs directly and fall back to vision OCR for scanned or image-only PDFs.
+- Scan the configured raw source folder for new or changed Markdown, plain text, CSV/TSV, code, HTML, PDF, image, DOC/DOCX, XLS/XLSX, PPT/PPTX, and RTF files.
+- Extract text from text-layer PDFs, HTML pages, Office documents, spreadsheets, presentations, and RTF files; fall back to vision OCR for scanned/image-only PDF pages, image-only PPTX slides, and supported image files.
 - Track raw file content hashes so unchanged sources are skipped on later runs.
 - Send only new or changed raw files to an OpenAI-compatible chat completions endpoint.
 - Test the configured OpenAI-compatible endpoint from the settings page.
@@ -32,6 +32,18 @@ wiki/log.md      # chronological ingest/query/lint log
 ```
 
 All paths are configurable in the plugin settings.
+
+## Supported raw formats
+
+- Text and code: `.md`, `.txt`, `.csv`, `.tsv`, `.json`, `.yaml`, `.yml`, `.log`, `.ts`, `.js`, `.py`, `.go`, `.rs`, `.java`, `.cpp`, `.sql`, `.sh`
+- Web pages: `.html`, `.htm`
+- Documents: `.doc`, `.docx`, `.rtf`
+- Spreadsheets: `.xls`, `.xlsx`
+- Presentations: `.ppt`, `.pptx`
+- PDFs: `.pdf`
+- Images for OCR: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`
+
+PDFs and PPTX files are parsed directly when they contain readable text. PDF pages, PPTX slides, and image files only use vision OCR when text is not directly extractable.
 
 ## Installation
 
@@ -70,7 +82,7 @@ All paths are configurable in the plugin settings.
 
 Open the plugin settings and configure:
 
-- **Raw folder**: folder containing immutable source Markdown files and PDFs.
+- **Raw folder**: folder containing immutable source files. Supported raw inputs include Markdown, plain text, CSV/TSV, common code files, HTML, PDF, PNG/JPEG/WebP/GIF images, DOC/DOCX, XLS/XLSX, PPT/PPTX, and RTF.
 - **Wiki folder**: folder where generated wiki pages should be written.
 - **Assets folder**: read-only attachment folder.
 - **Index path**: wiki index file path.
@@ -90,19 +102,19 @@ Third-party OpenAI-compatible providers can be used as long as the URL points di
 
 ### Ingest changed raw files
 
-1. Put source Markdown files or PDFs under the configured raw folder.
+1. Put supported source files under the configured raw folder, such as Markdown, text, CSV/TSV, code, HTML, PDF, images, DOC/DOCX, XLS/XLSX, PPT/PPTX, or RTF.
 2. Run the command:
 
    ```text
    Ingest active source into Auto LLM Wiki
    ```
 
-Despite the command name, the current implementation scans the configured raw folder and processes only new or changed raw Markdown files and PDFs. Text-layer PDFs are extracted directly. Scanned or image-only PDFs are rendered page by page and sent to the configured OpenAI-compatible model for vision OCR before the extracted text is ingested. Files that have already been successfully applied are skipped until their content changes.
+Despite the command name, the current implementation scans the configured raw folder and processes only new or changed supported raw files. Text/code-like files are read directly, HTML is converted to readable text, Office documents, spreadsheets, presentations, and RTF files are extracted locally, and text-layer PDFs are extracted directly. Scanned or image-only PDF pages and image-only PPTX slides use vision OCR, and supported image files are sent to the configured OpenAI-compatible model for OCR before the extracted text is ingested. Files that have already been successfully applied are skipped until their content changes.
 
 The command flow is:
 
-1. Scan raw folder for changed files and report raw/PDF candidates in progress notices.
-2. Extract Markdown/PDF source text, using vision OCR when a PDF has no text layer.
+1. Scan raw folder for changed files and report supported raw/PDF candidates in progress notices.
+2. Extract source text from text/code, HTML, PDF, image, Office, spreadsheet, presentation, and RTF inputs, using vision OCR when a PDF page, PPTX slide, or image needs OCR.
 3. Send changed sources plus wiki context to the model.
 4. Validate the returned change plan.
 5. Show a review modal.
@@ -140,7 +152,7 @@ The plugin asks the model to look for stale claims, contradictions, orphan pages
 
 ## Privacy and network use
 
-This plugin sends selected vault content to the OpenAI-compatible chat completions endpoint configured in the plugin settings. During ingest, it sends new or changed raw Markdown source files, extracted text from text-layer PDFs, or rendered PDF page images for OCR when a PDF has no text layer, plus wiki index/log context. During query and lint commands, it sends relevant wiki context. The **Test OpenAI connection** button sends a small ping-style chat completions request to the configured endpoint. No network request is made until you configure an API URL and API key and run a command or click the test button.
+This plugin sends selected vault content to the OpenAI-compatible chat completions endpoint configured in the plugin settings. During ingest, it sends new or changed raw text extracted from supported source files, including Markdown, text/code, HTML, PDFs, Office documents, spreadsheets, presentations, and RTF files; when OCR is needed, it sends rendered PDF page images, embedded PPTX slide images, or supported image files to the configured model. Wiki index/log context is included. During query and lint commands, it sends relevant wiki context. The **Test OpenAI connection** button sends a small ping-style chat completions request to the configured endpoint. No network request is made until you configure an API URL and API key and run a command or click the test button.
 
 The API key is stored locally in Obsidian plugin data and is sent as an Authorization header only to the configured API URL. If you configure a third-party OpenAI-compatible endpoint, your API key and selected vault content are sent to that provider.
 

@@ -1,6 +1,6 @@
 import * as obsidian from "obsidian";
 import LLMWikiPlugin from "../src/main";
-import { hashContent } from "../src/rawTracker";
+import { hashBinaryContent } from "../src/rawTracker";
 
 const notices = (obsidian.Notice as unknown as { messages: string[] }).messages;
 const modals = (obsidian.Modal as unknown as { instances: Array<{ contentEl: { buttons: Array<{ onclick: () => Promise<void> }> } }> }).instances;
@@ -80,11 +80,12 @@ test("ingests a changed raw PDF into the wiki after review", async () => {
   expect(files.has("wiki/reports/report.md")).toBe(false);
   expect(savedData).toHaveLength(0);
 
-  await modals.at(-1)!.contentEl.buttons[0].onclick();
+  const latestModal = modals[modals.length - 1]!;
+  await latestModal.contentEl.buttons[0].onclick();
 
   expect(files.get("wiki/reports/report.md")?.content).toBe("# Report\nPDF first page");
-  expect(savedData.at(-1)).toEqual(expect.objectContaining({
-    rawFileState: { "raw/report.pdf": hashContent("PDF first page\n\nPDF second page") }
+  expect(savedData[savedData.length - 1]).toEqual(expect.objectContaining({
+    rawFileState: { "raw/report.pdf": hashBinaryContent(new ArrayBuffer(4)) }
   }));
 });
 
@@ -167,11 +168,12 @@ test("uses vision OCR fallback for scanned PDFs before ingesting", async () => {
   expect(ingestPrompt).toContain("福利微课堂\n中国中检福建公司");
   expect(notices).toContain("Auto LLM Wiki: OCR PDF page 1 from raw/scanned.pdf...");
 
-  await modals.at(-1)!.contentEl.buttons[0].onclick();
+  const latestModal = modals[modals.length - 1]!;
+  await latestModal.contentEl.buttons[0].onclick();
 
   expect(render).toHaveBeenCalled();
   expect(files.get("wiki/reports/scanned.md")?.content).toBe("# 福利微课堂");
-  expect(savedData.at(-1)).toEqual(expect.objectContaining({
-    rawFileState: { "raw/scanned.pdf": hashContent("福利微课堂\n中国中检福建公司") }
+  expect(savedData[savedData.length - 1]).toEqual(expect.objectContaining({
+    rawFileState: { "raw/scanned.pdf": hashBinaryContent(new ArrayBuffer(4)) }
   }));
 });

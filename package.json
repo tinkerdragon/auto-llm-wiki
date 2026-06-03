@@ -1,6 +1,6 @@
 {
   "name": "auto-llm-wiki",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Obsidian plugin for maintaining an LLM Wiki.",
   "main": "main.js",
   "scripts": {
@@ -24,5 +24,12 @@
     "obsidian": "^1.5.12",
     "ts-jest": "^29.1.2",
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@e965/xlsx": "^0.20.3",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "ppt-to-text": "^1.0.1",
+    "word-extractor": "^1.0.4"
   }
 }

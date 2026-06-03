@@ -36,6 +36,28 @@ test("interpolates named placeholders", () => {
   expect(t("status.extractingPdf", { path: "raw/a.pdf" })).toBe("Auto LLM Wiki: extracting text from PDF raw/a.pdf...");
 });
 
+test("provides English raw parser error messages", () => {
+  const translations = ENGLISH_TRANSLATIONS as Record<string, string>;
+
+  expect(translations["error.rawParseFailed"])
+    .toBe("Failed to parse raw file {path}: {message}");
+  expect(translations["error.officeFileEmpty"])
+    .toBe("No extractable text found in Office file: {path}");
+  expect(translations["error.imageOcrEmpty"])
+    .toBe("No text found in image: {path}");
+});
+
+test("provides zh raw parser error messages", () => {
+  const translations = SUPPORTED_TRANSLATIONS.zh as Record<string, string>;
+
+  expect(translations["error.rawParseFailed"])
+    .toBe("解析原始文件失败：{path}：{message}");
+  expect(translations["error.officeFileEmpty"])
+    .toBe("Office 文件中未找到可提取的文本：{path}");
+  expect(translations["error.imageOcrEmpty"])
+    .toBe("图片中未找到文本：{path}");
+});
+
 test("supported translation keys match Obsidian language codes", () => {
   expect(Object.keys(SUPPORTED_TRANSLATIONS).sort()).toEqual([...OBSIDIAN_LANGUAGE_CODES].sort());
 });

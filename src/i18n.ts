@@ -117,6 +117,10 @@ export const ENGLISH_TRANSLATIONS = {
   "error.openAIResponseInvalidJson": "OpenAI response was not JSON. Check the API URL; it should point to a chat completions endpoint.",
   "error.renderPdfPageForOcr": "Unable to render PDF page for OCR",
   "error.noExtractablePdfText": "No extractable text found in PDF: {path}",
+  "error.imageOcrProviderMissing": "Image OCR provider is not configured: {path}",
+  "error.rawParseFailed": "Failed to parse raw file {path}: {message}",
+  "error.officeFileEmpty": "No extractable text found in Office file: {path}",
+  "error.imageOcrEmpty": "No text found in image: {path}",
   "command.ingestActiveSource": "Ingest active source into Auto LLM Wiki",
   "command.queryWiki": "Query Auto LLM Wiki",
   "command.lintWiki": "Lint Auto LLM Wiki",
@@ -132,6 +136,7 @@ export const ENGLISH_TRANSLATIONS = {
   "label.sourceCandidate.one": "source candidate",
   "label.sourceCandidate.other": "source candidates",
   "status.ocrPdfPage": "Auto LLM Wiki: OCR PDF page {pageNumber} from {path}...",
+  "status.ocrImage": "Auto LLM Wiki: OCR image {path}...",
   "prompt.queryQuestion": "Ask the Auto LLM Wiki a question",
   "notice.missingOpenAIKey": "Set your OpenAI API key in Auto LLM Wiki settings.",
   "status.waitingModel": "Auto LLM Wiki: waiting for model response...",
@@ -155,7 +160,8 @@ export const ENGLISH_TRANSLATIONS = {
   "error.ingestFailed": "Auto LLM Wiki ingest failed.",
   "error.requestFailed": "Auto LLM Wiki request failed.",
   "prompt.outputLanguageInstruction": "Write user-visible natural-language output in {language}.",
-  "prompt.ocrPdfPage": "Transcribe all visible text from PDF page {pageNumber} of {path}. Return only the transcription, preserving text and line breaks as much as possible."
+  "prompt.ocrPdfPage": "Transcribe all visible text from PDF page {pageNumber} of {path}. Return only the transcription, preserving text and line breaks as much as possible.",
+  "prompt.ocrImage": "Transcribe all visible text from image {path}. Return only the transcription, preserving text and line breaks as much as possible."
 } as const;
 
 type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;
@@ -205,6 +211,10 @@ const ZH_TRANSLATIONS: Partial<TranslationTable> = {
   "error.openAIResponseInvalidJson": "OpenAI 响应不是 JSON。请检查 API URL；它应指向聊天补全端点。",
   "error.renderPdfPageForOcr": "无法渲染 PDF 页面以进行 OCR",
   "error.noExtractablePdfText": "未在 PDF 中找到可提取的文本：{path}",
+  "error.imageOcrProviderMissing": "未配置图片 OCR 提供程序：{path}",
+  "error.rawParseFailed": "解析原始文件失败：{path}：{message}",
+  "error.officeFileEmpty": "Office 文件中未找到可提取的文本：{path}",
+  "error.imageOcrEmpty": "图片中未找到文本：{path}",
   "command.ingestActiveSource": "将当前源资料导入 Auto LLM Wiki",
   "command.queryWiki": "查询 Auto LLM Wiki",
   "command.lintWiki": "检查 Auto LLM Wiki",
@@ -220,6 +230,7 @@ const ZH_TRANSLATIONS: Partial<TranslationTable> = {
   "label.sourceCandidate.one": "源候选项",
   "label.sourceCandidate.other": "源候选项",
   "status.ocrPdfPage": "Auto LLM Wiki：正在 OCR PDF 页面 {pageNumber}，文件 {path}...",
+  "status.ocrImage": "Auto LLM Wiki：正在 OCR 图片 {path}...",
   "prompt.queryQuestion": "向 Auto LLM Wiki 提问",
   "notice.missingOpenAIKey": "请在 Auto LLM Wiki 设置中填写 OpenAI API 密钥。",
   "status.waitingModel": "Auto LLM Wiki：正在等待模型响应...",
@@ -243,7 +254,8 @@ const ZH_TRANSLATIONS: Partial<TranslationTable> = {
   "error.ingestFailed": "Auto LLM Wiki 导入失败。",
   "error.requestFailed": "Auto LLM Wiki 请求失败。",
   "prompt.outputLanguageInstruction": "Write user-visible natural-language output in {language}.",
-  "prompt.ocrPdfPage": "转录 PDF 第 {pageNumber} 页（{path}）中所有可见文本。只返回转录内容，并尽可能保留文本和换行。"
+  "prompt.ocrPdfPage": "转录 PDF 第 {pageNumber} 页（{path}）中所有可见文本。只返回转录内容，并尽可能保留文本和换行。",
+  "prompt.ocrImage": "转录图片 {path} 中所有可见文本。只返回转录内容，并尽可能保留文本和换行。"
 };
 
 for (const locale of OBSIDIAN_LANGUAGE_CODES) {

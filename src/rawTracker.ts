@@ -1,7 +1,9 @@
-import { App, loadPdfJs, TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { LLMWikiSettings } from "./types";
 import { normalizePath } from "./changePlan";
 import { t } from "./i18n";
+import { isImageRawPath, isPdfRawPath, isSupportedRawPath, readRawFileWithParser } from "./rawParsers";
+import type { ImageOcrProvider, PdfOcrProvider, PdfPage } from "./rawParsers";
 
 export interface ChangedRawFile {
   path: string;
@@ -9,26 +11,7 @@ export interface ChangedRawFile {
   hash: string;
 }
 
-interface PdfTextItem {
-  str?: string;
-}
-
-interface PdfViewport {
-  width: number;
-  height: number;
-}
-
-interface PdfPage {
-  getTextContent(): Promise<{ items: PdfTextItem[] }>;
-  getViewport(options: { scale: number }): PdfViewport;
-  render(options: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): { promise: Promise<void> };
-}
-
-export interface PdfOcrRequest {
-  page: PdfPage;
-  path: string;
-  pageNumber: number;
-}
+export type { ImageOcrProvider, ImageOcrRequest, PdfOcrProvider, PdfOcrRequest } from "./rawParsers";
 
 export async function renderPdfPageToPngDataUrl(page: PdfPage, scale = 2): Promise<string> {
   const viewport = page.getViewport({ scale });
@@ -39,17 +22,6 @@ export async function renderPdfPageToPngDataUrl(page: PdfPage, scale = 2): Promi
   if (!context) throw new Error(t("error.renderPdfPageForOcr"));
   await page.render({ canvasContext: context, viewport }).promise;
   return canvas.toDataURL("image/png");
-}
-
-export type PdfOcrProvider = (request: PdfOcrRequest) => Promise<string>;
-
-interface PdfDocument {
-  numPages: number;
-  getPage(pageNumber: number): Promise<PdfPage>;
-}
-
-interface PdfJs {
-  getDocument(data: { data: Uint8Array }): { promise: Promise<PdfDocument> };
 }
 
 export type RawFileState = Record<string, string>;
@@ -72,12 +44,22 @@ export function hashContent(content: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+export function hashBinaryContent(buffer: ArrayBuffer): string {
+  let hash = 2166136261;
+  const bytes = new Uint8Array(buffer);
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 export function findRawFileCandidates<T extends RawCandidateFile>(files: T[], settings: LLMWikiSettings): RawFileCandidates<T> {
   const rawFolder = normalizePath(settings.rawFolder);
-  const sourceFiles = files.filter((file) => file.path.startsWith(`${rawFolder}/`) && isSupportedRawFile(file.path));
+  const sourceFiles = files.filter((file) => file.path.startsWith(`${rawFolder}/`) && isSupportedRawPath(file.path));
   return {
     sourceFiles,
-    pdfPaths: sourceFiles.filter((file) => isPdfPath(file.path)).map((file) => file.path)
+    pdfPaths: sourceFiles.filter((file) => isPdfRawPath(file.path)).map((file) => file.path)
   };
 }
 
@@ -86,13 +68,23 @@ export async function findChangedRawFiles(
   settings: LLMWikiSettings,
   state: RawFileState,
   onPdfExtract?: (path: string) => void,
-  pdfOcrProvider?: PdfOcrProvider
+  pdfOcrProvider?: PdfOcrProvider,
+  imageOcrProvider?: ImageOcrProvider
 ): Promise<ChangedRawFile[]> {
   const rawFiles = findRawFileCandidates(app.vault.getFiles(), settings).sourceFiles;
 
   const changedFiles: ChangedRawFile[] = [];
   for (const file of rawFiles) {
-    const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider);
+    if (isImageRawPath(file.path) || isPdfRawPath(file.path)) {
+      const binaryBuffer = await app.vault.readBinary(file as TFile);
+      const hash = hashBinaryContent(binaryBuffer);
+      if (state[file.path] === hash) continue;
+      const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
+      changedFiles.push({ path: file.path, content, hash });
+      continue;
+    }
+
+    const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
     const hash = hashContent(content);
     if (state[file.path] !== hash) {
       changedFiles.push({ path: file.path, content, hash });
@@ -101,47 +93,14 @@ export async function findChangedRawFiles(
   return changedFiles;
 }
 
-function isSupportedRawFile(path: string): boolean {
-  const lowerPath = path.toLowerCase();
-  return lowerPath.endsWith(".md") || lowerPath.endsWith(".pdf");
-}
-
-function isPdfPath(path: string): boolean {
-  return path.toLowerCase().endsWith(".pdf");
-}
-
 async function readRawFileContent(
   app: App,
   file: TFile,
   onPdfExtract?: (path: string) => void,
-  pdfOcrProvider?: PdfOcrProvider
+  pdfOcrProvider?: PdfOcrProvider,
+  imageOcrProvider?: ImageOcrProvider
 ): Promise<string> {
-  if (isPdfPath(file.path)) {
-    onPdfExtract?.(file.path);
-    return readPdfText(app, file, pdfOcrProvider);
-  }
-  return app.vault.read(file);
-}
-
-async function readPdfText(app: App, file: TFile, pdfOcrProvider?: PdfOcrProvider): Promise<string> {
-  const pdfJs = await loadPdfJs() as PdfJs;
-  const data = new Uint8Array(await app.vault.readBinary(file));
-  const document = await pdfJs.getDocument({ data }).promise;
-  const pages: string[] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
-    const page = await document.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map((item) => item.str ?? "").join(" ").trim();
-    if (pageText) {
-      pages.push(pageText);
-    } else if (pdfOcrProvider) {
-      const ocrText = (await pdfOcrProvider({ page, path: file.path, pageNumber })).trim();
-      if (ocrText) pages.push(ocrText);
-    }
-  }
-  const text = pages.join("\n\n");
-  if (!text) throw new Error(t("error.noExtractablePdfText", { path: file.path }));
-  return text;
+  return readRawFileWithParser(app, file, { onPdfExtract, pdfOcrProvider, imageOcrProvider });
 }
 
 export function updateRawFileState(state: RawFileState, files: ChangedRawFile[]): RawFileState {

@@ -4,7 +4,7 @@ import { t } from "./i18n";
 import { buildIngestPrompt, buildLintPrompt, buildQueryPrompt } from "./prompts";
 import { OpenAIProvider, OpenAIProviderError } from "./providers/OpenAIProvider";
 import { ChangePlanPreviewModal } from "./previewModal";
-import { findChangedRawFiles, findRawFileCandidates, PdfOcrRequest, RawFileState, renderPdfPageToPngDataUrl, updateRawFileState } from "./rawTracker";
+import { findChangedRawFiles, findRawFileCandidates, ImageOcrRequest, PdfOcrRequest, RawFileState, renderPdfPageToPngDataUrl, updateRawFileState } from "./rawTracker";
 import { DEFAULT_SETTINGS, LLMWikiSettingTab } from "./settings";
 import { LLMWikiPluginData, LLMWikiSettings } from "./types";
 import { listMarkdownFiles, readTextFile } from "./vaultOps";
@@ -54,6 +54,11 @@ export default class LLMWikiPlugin extends Plugin {
   }
 
   private async ingestActiveSource(): Promise<void> {
+    if (!this.settings.openAIApiKey) {
+      new Notice(t("notice.missingOpenAIKey"));
+      return;
+    }
+
     try {
       const scanningMessage = t("status.scanningRaw");
       this.setStatus(scanningMessage);
@@ -66,7 +71,7 @@ export default class LLMWikiPlugin extends Plugin {
         const message = t("status.extractingPdf", { path });
         this.setStatus(message);
         new Notice(message);
-      }, (request) => this.ocrPdfPage(request));
+      }, (request) => this.ocrPdfPage(request), (request) => this.ocrImage(request));
       if (changedRawFiles.length === 0) {
         this.setStatus(t("status.noRawChanges"));
         new Notice(t("notice.noRawChanges"));
@@ -106,13 +111,35 @@ export default class LLMWikiPlugin extends Plugin {
     new Notice(message);
     const imageDataUrl = await renderPdfPageToPngDataUrl(request.page);
     const provider = new OpenAIProvider();
-    return provider.completeVision({
-      apiKey: this.settings.openAIApiKey,
-      apiUrl: this.settings.openAIApiUrl,
-      model: this.settings.openAIModel,
-      prompt: t("prompt.ocrPdfPage", { pageNumber: request.pageNumber, path: request.path }),
-      imageDataUrl
-    });
+    try {
+      return await provider.completeVision({
+        apiKey: this.settings.openAIApiKey,
+        apiUrl: this.settings.openAIApiUrl,
+        model: this.settings.openAIModel,
+        prompt: t("prompt.ocrPdfPage", { pageNumber: request.pageNumber, path: request.path }),
+        imageDataUrl
+      });
+    } catch (error) {
+      throw new Error(formatOpenAIErrorMessage(error, t("error.requestFailed")));
+    }
+  }
+
+  private async ocrImage(request: ImageOcrRequest): Promise<string> {
+    const message = t("status.ocrImage", { path: request.path });
+    this.setStatus(message);
+    new Notice(message);
+    const provider = new OpenAIProvider();
+    try {
+      return await provider.completeVision({
+        apiKey: this.settings.openAIApiKey,
+        apiUrl: this.settings.openAIApiUrl,
+        model: this.settings.openAIModel,
+        prompt: t("prompt.ocrImage", { path: request.path }),
+        imageDataUrl: request.imageDataUrl
+      });
+    } catch (error) {
+      throw new Error(formatOpenAIErrorMessage(error, t("error.requestFailed")));
+    }
   }
 
   private async queryWiki(): Promise<void> {

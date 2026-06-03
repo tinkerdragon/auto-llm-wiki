@@ -20,6 +20,28 @@ test("onload initializes persistent status bar as idle", async () => {
   expect(plugin.statusBarItems[0].text).toBe("Auto LLM Wiki: idle");
 });
 
+test("ingest command does not parse or OCR raw files without an API key", async () => {
+  const requestSpy = jest.spyOn(obsidian, "requestUrl");
+  const loadPdfSpy = jest.spyOn(obsidian, "loadPdfJs");
+  const TFileMock = obsidian.TFile as unknown as { new(path: string): obsidian.TFile };
+  const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
+  jest.spyOn(plugin, "loadData").mockResolvedValue({ openAIApiKey: "" });
+  plugin.app = {
+    vault: {
+      getFiles: () => [new TFileMock("raw/scanned.pdf"), new TFileMock("raw/image.png")],
+      readBinary: jest.fn(async () => new ArrayBuffer(4))
+    }
+  } as never;
+
+  await plugin.onload();
+  await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
+
+  expect(notices).toContain("Set your OpenAI API key in Auto LLM Wiki settings.");
+  expect(requestSpy).not.toHaveBeenCalled();
+  expect(loadPdfSpy).not.toHaveBeenCalled();
+  expect((plugin.app as unknown as { vault: { readBinary: jest.Mock } }).vault.readBinary).not.toHaveBeenCalled();
+});
+
 test("ingest command updates persistent status bar for each long-running stage", async () => {
   jest.spyOn(obsidian, "requestUrl").mockResolvedValue({
     status: 200,
@@ -116,10 +138,11 @@ test("ingest command saves raw hashes only after applying the proposed changes",
   await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
   expect(savedData).toHaveLength(0);
 
-  const latestModal = (obsidian.Modal as unknown as { instances: Array<{ contentEl: { buttons: Array<{ onclick: () => Promise<void> }> } }> }).instances.at(-1)!;
+  const modals = (obsidian.Modal as unknown as { instances: Array<{ contentEl: { buttons: Array<{ onclick: () => Promise<void> }> } }> }).instances;
+  const latestModal = modals[modals.length - 1]!;
   await latestModal.contentEl.buttons[0].onclick();
 
-  expect(JSON.stringify(savedData.at(-1))).toContain("raw/source.md");
+  expect(JSON.stringify(savedData[savedData.length - 1])).toContain("raw/source.md");
 });
 
 test("ingest command saves raw PDF hash after applying the proposed changes", async () => {
@@ -172,10 +195,11 @@ test("ingest command saves raw PDF hash after applying the proposed changes", as
   await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
   expect(savedData).toHaveLength(0);
 
-  const latestModal = (obsidian.Modal as unknown as { instances: Array<{ contentEl: { buttons: Array<{ onclick: () => Promise<void> }> } }> }).instances.at(-1)!;
+  const modals = (obsidian.Modal as unknown as { instances: Array<{ contentEl: { buttons: Array<{ onclick: () => Promise<void> }> } }> }).instances;
+  const latestModal = modals[modals.length - 1]!;
   await latestModal.contentEl.buttons[0].onclick();
 
-  expect(JSON.stringify(savedData.at(-1))).toContain("raw/report.pdf");
+  expect(JSON.stringify(savedData[savedData.length - 1])).toContain("raw/report.pdf");
 });
 
 test("OCR provider failures are localized at the ingest UI boundary", async () => {
@@ -216,8 +240,8 @@ test("OCR provider failures are localized at the ingest UI boundary", async () =
   await plugin.onload();
   await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
 
-  expect(plugin.statusBarItems[0].text).toBe("Auto LLM Wiki：错误 - OpenAI 请求失败：401 bad key");
-  expect(notices).toContain("OpenAI 请求失败：401 bad key");
+  expect(plugin.statusBarItems[0].text).toBe("Auto LLM Wiki：错误 - 解析原始文件失败：raw/scanned.pdf：OpenAI 请求失败：401 bad key");
+  expect(notices).toContain("解析原始文件失败：raw/scanned.pdf：OpenAI 请求失败：401 bad key");
 });
 
 test("runPrompt localizes OpenAI request failures at the UI boundary", async () => {

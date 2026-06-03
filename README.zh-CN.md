@@ -6,8 +6,8 @@ Auto LLM Wiki 是一个用于维护 Karpathy 风格 LLM Wiki 的 Obsidian 插件
 
 ## 功能
 
-- 扫描已配置的原始来源文件夹，发现新增或变更的 Markdown 文件和 PDF 文件。
-- 直接抽取带文本层的 PDF，并对扫描版或纯图片 PDF 使用视觉 OCR fallback。
+- 扫描已配置的原始来源文件夹，发现新增或变更的 Markdown、纯文本、CSV/TSV、代码、HTML、PDF、图片、DOC/DOCX、XLS/XLSX、PPT/PPTX 和 RTF 文件。
+- 从带文本层的 PDF、HTML 页面、Office 文档、表格、演示文稿和 RTF 文件中抽取文本；对扫描版/纯图片 PDF 页面、纯图片 PPTX 幻灯片以及受支持的图片文件使用视觉 OCR。
 - 跟踪原始文件内容哈希，在后续运行中跳过未变化的来源。
 - 只把新增或变更的原始文件发送到 OpenAI-compatible chat completions endpoint。
 - 在设置页测试已配置的 OpenAI-compatible endpoint 是否可用。
@@ -32,6 +32,18 @@ wiki/log.md      # 按时间记录的 ingest/query/lint 日志
 ```
 
 所有路径都可以在插件设置中配置。
+
+## 支持的原始格式
+
+- 文本和代码：`.md`、`.txt`、`.csv`、`.tsv`、`.json`、`.yaml`、`.yml`、`.log`、`.ts`、`.js`、`.py`、`.go`、`.rs`、`.java`、`.cpp`、`.sql`、`.sh`
+- 网页：`.html`、`.htm`
+- 文档：`.doc`、`.docx`、`.rtf`
+- 表格：`.xls`、`.xlsx`
+- 演示文稿：`.ppt`、`.pptx`
+- PDF：`.pdf`
+- 用于 OCR 的图片：`.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`
+
+PDF 和 PPTX 文件包含可读文本时会优先直接解析。只有 PDF 页面、PPTX 幻灯片或图片文件无法直接抽取文本时，才会使用视觉 OCR。
 
 ## 安装
 
@@ -70,7 +82,7 @@ wiki/log.md      # 按时间记录的 ingest/query/lint 日志
 
 打开插件设置并配置：
 
-- **Raw folder**：包含不可变来源 Markdown 文件和 PDF 的文件夹。
+- **Raw folder**：包含不可变来源文件的文件夹。受支持的原始输入包括 Markdown、纯文本、CSV/TSV、常见代码文件、HTML、PDF、PNG/JPEG/WebP/GIF 图片、DOC/DOCX、XLS/XLSX、PPT/PPTX 和 RTF。
 - **Wiki folder**：生成的 Wiki 页面写入位置。
 - **Assets folder**：只读附件文件夹。
 - **Index path**：Wiki 索引文件路径。
@@ -90,19 +102,19 @@ wiki/log.md      # 按时间记录的 ingest/query/lint 日志
 
 ### 摄入变更的原始文件
 
-1. 将来源 Markdown 文件或 PDF 放到已配置的 raw folder 下。
+1. 将受支持的来源文件放到已配置的 raw folder 下，例如 Markdown、文本、CSV/TSV、代码、HTML、PDF、图片、DOC/DOCX、XLS/XLSX、PPT/PPTX 或 RTF。
 2. 运行命令：
 
    ```text
    Ingest active source into Auto LLM Wiki
    ```
 
-虽然命令名如此，当前实现会扫描已配置的 raw folder，并且只处理新增或变更过的原始 Markdown 文件和 PDF。带文本层的 PDF 会被直接抽取；扫描版或纯图片 PDF 会逐页渲染为图片，并发送给已配置的 OpenAI-compatible 模型进行视觉 OCR，然后再摄入识别出的文本。已经成功应用过的文件会被跳过，直到其内容发生变化。
+虽然命令名如此，当前实现会扫描已配置的 raw folder，并且只处理新增或变更过的受支持原始文件。文本/代码类文件会直接读取，HTML 会转换为可读文本，Office 文档、表格、演示文稿和 RTF 文件会在本地抽取文本，带文本层的 PDF 会被直接抽取。扫描版或纯图片 PDF 页面、纯图片 PPTX 幻灯片会使用视觉 OCR，受支持的图片文件也会发送给已配置的 OpenAI-compatible 模型进行 OCR，然后再摄入识别出的文本。已经成功应用过的文件会被跳过，直到其内容发生变化。
 
 命令流程：
 
-1. 扫描 raw folder 中的变更文件，并在进度提示中显示 raw/PDF 候选文件。
-2. 抽取 Markdown/PDF 来源文本；当 PDF 没有文本层时使用视觉 OCR。
+1. 扫描 raw folder 中的变更文件，并在进度提示中显示受支持的 raw/PDF 候选文件。
+2. 从文本/代码、HTML、PDF、图片、Office、表格、演示文稿和 RTF 输入中抽取来源文本；当 PDF 页面、PPTX 幻灯片或图片需要 OCR 时使用视觉 OCR。
 3. 将变更来源和 Wiki 上下文发送给模型。
 4. 验证返回的变更计划。
 5. 显示审阅弹窗。
@@ -140,7 +152,7 @@ Lint Auto LLM Wiki
 
 ## 隐私和网络使用
 
-此插件会将选定的 vault 内容发送到插件设置中配置的 OpenAI-compatible chat completions endpoint。摄入时，它会发送新增或变更的原始 Markdown 来源文件、从带文本层 PDF 中抽取出的文本，或在 PDF 没有文本层时发送渲染后的 PDF 页面图片用于 OCR，并附带 Wiki index/log 上下文。执行 query 和 lint 命令时，它会发送相关 Wiki 上下文。**Test OpenAI connection** 按钮会向已配置 endpoint 发送一个很小的 ping 式 chat completions 请求。除非你配置了 API URL 和 API key 并运行命令或点击测试按钮，否则插件不会发起网络请求。
+此插件会将选定的 vault 内容发送到插件设置中配置的 OpenAI-compatible chat completions endpoint。摄入时，它会发送从受支持来源文件中抽取出的新增或变更原始文本，包括 Markdown、文本/代码、HTML、PDF、Office 文档、表格、演示文稿和 RTF 文件；当需要 OCR 时，它会将渲染后的 PDF 页面图片、PPTX 幻灯片中的嵌入图片或受支持的图片文件发送给已配置的模型，并附带 Wiki index/log 上下文。执行 query 和 lint 命令时，它会发送相关 Wiki 上下文。**Test OpenAI connection** 按钮会向已配置 endpoint 发送一个很小的 ping 式 chat completions 请求。除非你配置了 API URL 和 API key 并运行命令或点击测试按钮，否则插件不会发起网络请求。
 
 API key 会本地存储在 Obsidian 插件数据中，并且只会作为 Authorization header 发送到已配置的 API URL。如果你配置了第三方 OpenAI-compatible endpoint，你的 API key 和选中的 vault 内容会发送给该 provider。
 

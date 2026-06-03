@@ -1,18 +1,31 @@
 import * as obsidian from "obsidian";
-import { findChangedRawFiles, findRawFileCandidates, hashContent } from "../src/rawTracker";
+import { findChangedRawFiles, findRawFileCandidates, hashBinaryContent, hashContent } from "../src/rawTracker";
 import { DEFAULT_SETTINGS } from "../src/settings";
+
+beforeEach(() => {
+  jest.restoreAllMocks();
+});
 
 test("hashContent changes when file content changes", () => {
   expect(hashContent("alpha")).toBe(hashContent("alpha"));
   expect(hashContent("alpha")).not.toBe(hashContent("beta"));
 });
 
-test("findRawFileCandidates reports raw source and PDF candidates", () => {
+test("findRawFileCandidates reports raw text, code, PDF, image, HTML, and Office candidates", () => {
   const files = [
     { path: "raw/20260509.Skill.md" },
+    { path: "raw/notes.txt" },
+    { path: "raw/data.csv" },
+    { path: "raw/code.ts" },
+    { path: "raw/page.html" },
+    { path: "raw/assets/image.png" },
     { path: "raw/中国中检福建公司【福利微课堂】第一期.pdf" },
+    { path: "raw/file.doc" },
+    { path: "raw/file.docx" },
+    { path: "raw/file.xlsx" },
+    { path: "raw/file.pptx" },
     { path: "wiki/page.md" },
-    { path: "raw/assets/image.png" }
+    { path: "raw/ignored.exe" }
   ];
 
   const candidates = findRawFileCandidates(files as never, DEFAULT_SETTINGS);
@@ -20,7 +33,16 @@ test("findRawFileCandidates reports raw source and PDF candidates", () => {
   expect(candidates).toEqual({
     sourceFiles: [
       { path: "raw/20260509.Skill.md" },
-      { path: "raw/中国中检福建公司【福利微课堂】第一期.pdf" }
+      { path: "raw/notes.txt" },
+      { path: "raw/data.csv" },
+      { path: "raw/code.ts" },
+      { path: "raw/page.html" },
+      { path: "raw/assets/image.png" },
+      { path: "raw/中国中检福建公司【福利微课堂】第一期.pdf" },
+      { path: "raw/file.doc" },
+      { path: "raw/file.docx" },
+      { path: "raw/file.xlsx" },
+      { path: "raw/file.pptx" }
     ],
     pdfPaths: ["raw/中国中检福建公司【福利微课堂】第一期.pdf"]
   });
@@ -32,14 +54,14 @@ test("findChangedRawFiles returns new and changed markdown files only", async ()
     { path: "raw/changed.md" },
     { path: "raw/unchanged.md" },
     { path: "wiki/page.md" },
-    { path: "raw/image.png" }
+    { path: "raw/tool.exe" }
   ];
   const contentByPath: Record<string, string> = {
     "raw/new.md": "new",
     "raw/changed.md": "changed-v2",
     "raw/unchanged.md": "same",
     "wiki/page.md": "wiki",
-    "raw/image.png": "binary"
+    "raw/tool.exe": "binary"
   };
   const app = {
     vault: {
@@ -92,7 +114,7 @@ test("findChangedRawFiles extracts changed raw PDF text", async () => {
 
   expect(changed).toEqual([
     { path: "raw/source.md", content: "markdown", hash: hashContent("markdown") },
-    { path: "raw/report.pdf", content: "First page\n\nSecond page", hash: hashContent("First page\n\nSecond page") }
+    { path: "raw/report.pdf", content: "First page\n\nSecond page", hash: hashBinaryContent(new ArrayBuffer(4)) }
   ]);
 });
 
@@ -117,7 +139,7 @@ test("findChangedRawFiles extracts raw PDFs with uppercase extensions", async ()
   const changed = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {});
 
   expect(changed).toEqual([
-    { path: "raw/REPORT.PDF", content: "Uppercase PDF", hash: hashContent("Uppercase PDF") }
+    { path: "raw/REPORT.PDF", content: "Uppercase PDF", hash: hashBinaryContent(new ArrayBuffer(4)) }
   ]);
 });
 
@@ -143,7 +165,7 @@ test("findChangedRawFiles extracts the reported Chinese PDF filename", async () 
   const changed = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {});
 
   expect(changed).toEqual([
-    { path, content: "福利微课堂内容", hash: hashContent("福利微课堂内容") }
+    { path, content: "福利微课堂内容", hash: hashBinaryContent(new ArrayBuffer(4)) }
   ]);
 });
 
@@ -169,7 +191,7 @@ test("findChangedRawFiles respects raw folders configured with a trailing slash"
   const changed = await findChangedRawFiles(app as never, { ...DEFAULT_SETTINGS, rawFolder: "raw/" }, {});
 
   expect(changed).toEqual([
-    { path, content: "Trailing slash", hash: hashContent("Trailing slash") }
+    { path, content: "Trailing slash", hash: hashBinaryContent(new ArrayBuffer(4)) }
   ]);
 });
 
@@ -195,7 +217,7 @@ test("findChangedRawFiles falls back to OCR when a PDF has no text layer", async
 
   expect(ocrProvider).toHaveBeenCalledWith({ page, path: "raw/scanned.pdf", pageNumber: 1 });
   expect(changed).toEqual([
-    { path: "raw/scanned.pdf", content: "OCR 福利微课堂", hash: hashContent("OCR 福利微课堂") }
+    { path: "raw/scanned.pdf", content: "OCR 福利微课堂", hash: hashBinaryContent(new ArrayBuffer(4)) }
   ]);
 });
 
@@ -217,4 +239,71 @@ test("findChangedRawFiles reports PDFs without extractable text", async () => {
 
   await expect(findChangedRawFiles(app as never, DEFAULT_SETTINGS, {}))
     .rejects.toThrow("No extractable text found in PDF: raw/scanned.pdf");
+});
+
+test("findChangedRawFiles skips PDF parsing and OCR for unchanged raw PDFs", async () => {
+  const pdfBuffer = Uint8Array.from([1, 2, 3]).buffer;
+  const loadPdfSpy = jest.spyOn(obsidian, "loadPdfJs");
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/scanned.pdf" }],
+      readBinary: jest.fn(async () => pdfBuffer)
+    }
+  };
+  const pdfOcrProvider = jest.fn(async () => "OCR text");
+
+  const changed = await findChangedRawFiles(
+    app as never,
+    DEFAULT_SETTINGS,
+    { "raw/scanned.pdf": hashBinaryContent(pdfBuffer) },
+    undefined,
+    pdfOcrProvider
+  );
+
+  expect(changed).toEqual([]);
+  expect(loadPdfSpy).not.toHaveBeenCalled();
+  expect(pdfOcrProvider).not.toHaveBeenCalled();
+});
+
+test("findChangedRawFiles extracts changed raw image text through OCR", async () => {
+  const file = { path: "raw/screenshot.png" };
+  const app = {
+    vault: {
+      getFiles: () => [file],
+      readBinary: jest.fn(async () => Uint8Array.from([1, 2, 3]).buffer)
+    }
+  };
+  const imageOcrProvider = jest.fn(async () => "Screenshot text");
+
+  const changed = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {}, undefined, undefined, imageOcrProvider);
+
+  expect(imageOcrProvider).toHaveBeenCalledTimes(1);
+  expect(imageOcrProvider).toHaveBeenCalledWith({ path: "raw/screenshot.png", imageDataUrl: "data:image/png;base64,AQID" });
+  expect(changed).toEqual([
+    { path: "raw/screenshot.png", content: "Screenshot text", hash: hashBinaryContent(Uint8Array.from([1, 2, 3]).buffer) }
+  ]);
+});
+
+test("findChangedRawFiles skips OCR for unchanged raw images", async () => {
+  const imageBuffer = Uint8Array.from([1, 2, 3]).buffer;
+  const file = { path: "raw/screenshot.png" };
+  const app = {
+    vault: {
+      getFiles: () => [file],
+      readBinary: jest.fn(async () => imageBuffer)
+    }
+  };
+  const imageOcrProvider = jest.fn(async () => "Screenshot text");
+
+  const changed = await findChangedRawFiles(
+    app as never,
+    DEFAULT_SETTINGS,
+    { "raw/screenshot.png": hashBinaryContent(imageBuffer) },
+    undefined,
+    undefined,
+    imageOcrProvider
+  );
+
+  expect(imageOcrProvider).not.toHaveBeenCalled();
+  expect(changed).toEqual([]);
 });
