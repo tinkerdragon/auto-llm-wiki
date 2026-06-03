@@ -59,6 +59,22 @@ test("renders a polished card-based review layout", () => {
   ]));
 });
 
+test("renders prepend operations in preview summaries", () => {
+  const modal = new ChangePlanPreviewModal({} as never, {
+    summary: "latest log",
+    operations: [
+      { kind: "prepend", path: "wiki/log.md", content: "new entry", rationale: "Record newest first" }
+    ]
+  }, jest.fn());
+
+  modal.onOpen();
+
+  const texts = (modal.contentEl as unknown as { texts: string[] }).texts;
+  expect(texts).toContain("1 prepend");
+  expect(texts).toContain("PREPEND");
+  expect(texts).toContain("wiki/log.md");
+});
+
 test("shows an empty-plan explanation when there are no proposed operations", () => {
   const modal = new ChangePlanPreviewModal({} as never, {
     summary: "",
