@@ -1,8 +1,9 @@
+import * as JSZip from "jszip";
 import { App, TFile } from "obsidian";
 import { LLMWikiSettings } from "./types";
 import { normalizePath } from "./changePlan";
 import { t } from "./i18n";
-import { isImageRawPath, isPdfRawPath, isSupportedRawPath, readRawFileWithParser } from "./rawParsers";
+import { isBinaryOfficeRawPath, isImageRawPath, isOpenXmlRawPath, isPdfRawPath, isSupportedRawPath, readRawFileWithParser } from "./rawParsers";
 import type { ImageOcrProvider, PdfOcrProvider, PdfPage } from "./rawParsers";
 
 export interface ChangedRawFile {
@@ -54,6 +55,23 @@ export function hashBinaryContent(buffer: ArrayBuffer): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+const OPEN_XML_IGNORED_PREFIXES = ["docProps/"];
+
+function isIgnoredOpenXmlEntry(path: string): boolean {
+  return OPEN_XML_IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+export async function hashOpenXmlContent(buffer: ArrayBuffer): Promise<string> {
+  const archive = await JSZip.loadAsync(buffer);
+  const parts: string[] = [];
+  for (const path of Object.keys(archive.files).sort()) {
+    const file = archive.files[path];
+    if (!file || file.dir || isIgnoredOpenXmlEntry(path)) continue;
+    parts.push(path, await file.async("base64"));
+  }
+  return hashContent(parts.join("\0"));
+}
+
 export function findRawFileCandidates<T extends RawCandidateFile>(files: T[], settings: LLMWikiSettings): RawFileCandidates<T> {
   const rawFolder = normalizePath(settings.rawFolder);
   const sourceFiles = files.filter((file) => file.path.startsWith(`${rawFolder}/`) && isSupportedRawPath(file.path));
@@ -75,7 +93,16 @@ export async function findChangedRawFiles(
 
   const changedFiles: ChangedRawFile[] = [];
   for (const file of rawFiles) {
-    if (isImageRawPath(file.path) || isPdfRawPath(file.path)) {
+    if (isOpenXmlRawPath(file.path)) {
+      const binaryBuffer = await app.vault.readBinary(file as TFile);
+      const hash = await hashOpenXmlContent(binaryBuffer);
+      if (state[file.path] === hash) continue;
+      const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
+      changedFiles.push({ path: file.path, content, hash });
+      continue;
+    }
+
+    if (isImageRawPath(file.path) || isPdfRawPath(file.path) || isBinaryOfficeRawPath(file.path)) {
       const binaryBuffer = await app.vault.readBinary(file as TFile);
       const hash = hashBinaryContent(binaryBuffer);
       if (state[file.path] === hash) continue;

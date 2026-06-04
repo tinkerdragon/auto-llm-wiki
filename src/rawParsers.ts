@@ -224,6 +224,15 @@ function isDocxRawPath(path: string): boolean {
   return getLowercaseExtension(path) === ".docx";
 }
 
+export function isOpenXmlRawPath(path: string): boolean {
+  const extension = getLowercaseExtension(path);
+  return extension === ".docx" || extension === ".xlsx" || extension === ".pptx";
+}
+
+export function isBinaryOfficeRawPath(path: string): boolean {
+  return isDocxRawPath(path) || isDocRawPath(path) || isXlsxRawPath(path) || isPptRawPath(path) || isPptxRawPath(path);
+}
+
 const docxParser: RawParser = {
   supports(path: string): boolean {
     return isDocxRawPath(path);

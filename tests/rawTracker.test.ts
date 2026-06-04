@@ -1,10 +1,20 @@
 import * as obsidian from "obsidian";
-import { findChangedRawFiles, findRawFileCandidates, hashBinaryContent, hashContent } from "../src/rawTracker";
+import * as JSZip from "jszip";
+import { findChangedRawFiles, findRawFileCandidates, hashBinaryContent, hashContent, hashOpenXmlContent } from "../src/rawTracker";
 import { DEFAULT_SETTINGS } from "../src/settings";
 
 beforeEach(() => {
   jest.restoreAllMocks();
 });
+
+async function createOpenXmlPackage(entries: Record<string, string | Uint8Array>): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  for (const [path, content] of Object.entries(entries)) {
+    zip.file(path, content);
+  }
+  const bytes = await zip.generateAsync({ type: "uint8array", compression: "STORE" });
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
 
 test("hashContent changes when file content changes", () => {
   expect(hashContent("alpha")).toBe(hashContent("alpha"));
@@ -306,4 +316,88 @@ test("findChangedRawFiles skips OCR for unchanged raw images", async () => {
 
   expect(imageOcrProvider).not.toHaveBeenCalled();
   expect(changed).toEqual([]);
+});
+
+test("findChangedRawFiles skips PPTX parsing and OCR when binary content is unchanged", async () => {
+  const pptxBuffer = await createOpenXmlPackage({
+    "ppt/slides/slide1.xml": "<p:sld><a:t>Same</a:t></p:sld>"
+  });
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/deck.pptx" }],
+      readBinary: jest.fn(async () => pptxBuffer)
+    }
+  };
+  const imageOcrProvider = jest.fn(async () => "Slide OCR text");
+
+  const changed = await findChangedRawFiles(
+    app as never,
+    DEFAULT_SETTINGS,
+    { "raw/deck.pptx": await hashOpenXmlContent(pptxBuffer) },
+    undefined,
+    undefined,
+    imageOcrProvider
+  );
+
+  expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
+  expect(imageOcrProvider).not.toHaveBeenCalled();
+  expect(changed).toEqual([]);
+});
+
+test("findChangedRawFiles skips OpenXML metadata-only PPTX changes before OCR", async () => {
+  const baseEntries = {
+    "ppt/presentation.xml": "<p:presentation><p:sldIdLst><p:sldId r:id=\"rId1\"/></p:sldIdLst></p:presentation>",
+    "ppt/_rels/presentation.xml.rels": "<Relationships><Relationship Id=\"rId1\" Target=\"slides/slide1.xml\"/></Relationships>",
+    "ppt/slides/slide1.xml": "<p:sld><p:pic><a:blip r:embed=\"rId2\"/></p:pic></p:sld>",
+    "ppt/slides/_rels/slide1.xml.rels": "<Relationships><Relationship Id=\"rId2\" Target=\"../media/image1.png\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\"/></Relationships>",
+    "ppt/media/image1.png": Uint8Array.from([1, 2, 3])
+  };
+  const firstBuffer = await createOpenXmlPackage({ ...baseEntries, "docProps/core.xml": "created" });
+  const reopenedBuffer = await createOpenXmlPackage({ ...baseEntries, "docProps/core.xml": "modified by Office reopen" });
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/deck.pptx" }],
+      readBinary: jest.fn(async () => reopenedBuffer)
+    }
+  };
+  const imageOcrProvider = jest.fn(async () => "unstable OCR text");
+
+  const changed = await findChangedRawFiles(
+    app as never,
+    DEFAULT_SETTINGS,
+    { "raw/deck.pptx": await hashOpenXmlContent(firstBuffer) },
+    undefined,
+    undefined,
+    imageOcrProvider
+  );
+
+  expect(imageOcrProvider).not.toHaveBeenCalled();
+  expect(changed).toEqual([]);
+});
+
+test("findChangedRawFiles detects OpenXML PPTX slide content changes", async () => {
+  const changedBuffer = await createOpenXmlPackage({
+    "docProps/core.xml": "metadata",
+    "ppt/slides/slide1.xml": "<p:sld><a:t>New</a:t></p:sld>"
+  });
+  const unchangedBuffer = await createOpenXmlPackage({
+    "docProps/core.xml": "metadata",
+    "ppt/slides/slide1.xml": "<p:sld><a:t>Old</a:t></p:sld>"
+  });
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/deck.pptx" }],
+      readBinary: jest.fn(async () => changedBuffer)
+    }
+  };
+
+  const changed = await findChangedRawFiles(
+    app as never,
+    DEFAULT_SETTINGS,
+    { "raw/deck.pptx": await hashOpenXmlContent(unchangedBuffer) }
+  );
+
+  expect(changed).toEqual([
+    { path: "raw/deck.pptx", content: "# Slide 1\nNew", hash: await hashOpenXmlContent(changedBuffer) }
+  ]);
 });
