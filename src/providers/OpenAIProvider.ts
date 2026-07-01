@@ -14,7 +14,7 @@ type HttpResponse = { status: number; text: string; headers?: Record<string, str
 type HttpClient = (request: HttpRequest) => Promise<HttpResponse>;
 const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_TIMEOUT_MS = 120000;
+const DEFAULT_TIMEOUT_MS = 900000;
 const RETRY_BASE_DELAY_MS = 500;
 const MAX_RETRY_AFTER_MS = 60000;
 

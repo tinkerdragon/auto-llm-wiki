@@ -15,7 +15,8 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
   openAIApiKey: "",
   openAIModel: "gpt-4.1-mini",
   autoIngestEnabled: false,
-  autoIngestDebounceMs: 3000
+  autoIngestDebounceMs: 3000,
+  requestTimeoutMs: 900000
 };
 
 export class LLMWikiSettingTab extends PluginSettingTab {
@@ -40,7 +41,23 @@ export class LLMWikiSettingTab extends PluginSettingTab {
     this.addTextSetting(t("settings.openAIApiKey.name"), t("settings.openAIApiKey.desc"), "openAIApiKey", true);
     this.addTextSetting(t("settings.openAIModel.name"), t("settings.openAIModel.desc"), "openAIModel");
     this.addToggleSetting(t("settings.autoIngestEnabled.name"), t("settings.autoIngestEnabled.desc"), "autoIngestEnabled");
+    this.addTimeoutSetting();
     this.addOpenAIConnectionTest();
+  }
+
+  private addTimeoutSetting(): void {
+    new Setting(this.containerEl)
+      .setName(t("settings.requestTimeout.name"))
+      .setDesc(t("settings.requestTimeout.desc"))
+      .addText((text) => {
+        text.setValue(String(Math.round(this.plugin.settings.requestTimeoutMs / 1000)));
+        text.onChange(async (value) => {
+          const seconds = Number(value.trim());
+          if (!Number.isFinite(seconds) || seconds <= 0) return;
+          this.plugin.settings = { ...this.plugin.settings, requestTimeoutMs: Math.round(seconds * 1000) };
+          await this.plugin.saveSettings();
+        });
+      });
   }
 
   private addOpenAIConnectionTest(): void {

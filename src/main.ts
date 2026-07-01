@@ -58,6 +58,10 @@ export default class LLMWikiPlugin extends Plugin {
     this.statusBarItem?.setText(message);
   }
 
+  private createProvider(): OpenAIProvider {
+    return new OpenAIProvider(undefined, { timeoutMs: this.settings.requestTimeoutMs });
+  }
+
   enableAutoIngestListeners(): void {
     if (this.autoIngestEventRefs.length > 0) return;
     const createRef = this.app.vault.on("create", (file) => this.scheduleAutoIngest(file));
@@ -162,7 +166,7 @@ export default class LLMWikiPlugin extends Plugin {
     this.setStatus(message);
     new Notice(message);
     const imageDataUrl = await renderPdfPageToPngDataUrl(request.page);
-    const provider = new OpenAIProvider();
+    const provider = this.createProvider();
     try {
       return await provider.completeVision({
         apiKey: this.settings.openAIApiKey,
@@ -180,7 +184,7 @@ export default class LLMWikiPlugin extends Plugin {
     const message = t("status.ocrImage", { path: request.path });
     this.setStatus(message);
     new Notice(message);
-    const provider = new OpenAIProvider();
+    const provider = this.createProvider();
     try {
       return await provider.completeVision({
         apiKey: this.settings.openAIApiKey,
@@ -232,7 +236,7 @@ export default class LLMWikiPlugin extends Plugin {
       const waitingMessage = t("status.waitingModel");
       this.setStatus(waitingMessage);
       new Notice(waitingMessage);
-      const provider = new OpenAIProvider();
+      const provider = this.createProvider();
       const response = await provider.complete({
         apiKey: this.settings.openAIApiKey,
         apiUrl: this.settings.openAIApiUrl,

@@ -138,6 +138,19 @@ test("surfaces a truncated-response error during ingest without applying changes
   expect(savedData).toHaveLength(0);
 });
 
+test("uses the configured request timeout for completions", async () => {
+  jest.spyOn(obsidian, "requestUrl").mockImplementation(() => new Promise(() => undefined) as never);
+  const { plugin } = setup(
+    [{ path: "raw/note.md", content: "hello" }],
+    { openAIApiKey: "key", rawFileState: {}, requestTimeoutMs: 20 }
+  );
+
+  await plugin.onload();
+  await runIngest(plugin);
+
+  expect(notices).toContain("OpenAI request timed out. Check your connection or try again.");
+}, 2000);
+
 test("re-stamps an unchanged legacy-state file so later scans can fast-path", async () => {
   const requestSpy = jest.spyOn(obsidian, "requestUrl");
   const { plugin, reads, savedData } = setup(

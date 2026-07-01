@@ -39,6 +39,20 @@ test("auto ingest is disabled by default", () => {
   expect(DEFAULT_SETTINGS.autoIngestEnabled).toBe(false);
 });
 
+test("request timeout defaults to 900 seconds", () => {
+  expect(DEFAULT_SETTINGS.requestTimeoutMs).toBe(900000);
+});
+
+test("settings tab renders the request timeout control in seconds", () => {
+  const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
+  const tab = new LLMWikiSettingTab({} as never, plugin);
+
+  tab.display();
+
+  const texts = (tab.containerEl as unknown as { texts: string[] }).texts;
+  expect(texts).toContain("Request timeout (seconds)");
+});
+
 test("settings tab saves the auto ingest toggle", async () => {
   const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
   plugin.app = { vault: { on: jest.fn(() => "event") } } as never;

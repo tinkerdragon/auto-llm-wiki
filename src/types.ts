@@ -24,6 +24,7 @@ export interface LLMWikiSettings {
   openAIModel: string;
   autoIngestEnabled: boolean;
   autoIngestDebounceMs: number;
+  requestTimeoutMs: number;
 }
 
 export type FileOperationKind = "create" | "update" | "append" | "prepend";
