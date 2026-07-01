@@ -30,7 +30,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: t("settings.title") });
+    new Setting(containerEl).setName(t("settings.title")).setHeading();
 
     this.addTextSetting(t("settings.rawFolder.name"), t("settings.rawFolder.desc"), "rawFolder");
     this.addTextSetting(t("settings.wikiFolder.name"), t("settings.wikiFolder.desc"), "wikiFolder");

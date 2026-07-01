@@ -1,11 +1,31 @@
-let currentLanguage = "en";
+type LocalStorageLike = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+function ensureWindowLocalStorage(): LocalStorageLike {
+  const globalWindow = globalThis as { window?: { localStorage?: LocalStorageLike } };
+  if (!globalWindow.window) globalWindow.window = {};
+  if (!globalWindow.window.localStorage) {
+    const store: Record<string, string> = {};
+    globalWindow.window.localStorage = {
+      getItem: (key) => (key in store ? store[key] : null),
+      setItem: (key, value) => { store[key] = String(value); },
+      removeItem: (key) => { delete store[key]; }
+    };
+  }
+  return globalWindow.window.localStorage;
+}
+
+const languageStorage = ensureWindowLocalStorage();
 
 export function getLanguage(): string {
-  return currentLanguage;
+  return languageStorage.getItem("language") || "en";
 }
 
 export function __setLanguage(language: string): void {
-  currentLanguage = language;
+  languageStorage.setItem("language", language);
 }
 
 export class Notice {
@@ -58,6 +78,10 @@ export class Setting {
 
   setDesc(desc?: string): this {
     if (desc) (this.containerEl as { texts?: string[] }).texts?.push(desc);
+    return this;
+  }
+
+  setHeading(): this {
     return this;
   }
 
