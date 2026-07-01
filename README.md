@@ -10,6 +10,7 @@ Auto LLM Wiki is an Obsidian plugin for maintaining a Karpathy-style LLM Wiki. I
 - Extract text from text-layer PDFs, HTML pages, Office documents, spreadsheets, presentations, and RTF files; fall back to vision OCR for scanned/image-only PDF pages, image-only PPTX slides, and supported image files.
 - Track raw file content hashes so unchanged sources are skipped on later runs.
 - Send only new or changed raw files to an OpenAI-compatible chat completions endpoint.
+- Retry transient endpoint errors (network, 429, 5xx) with backoff, honor `Retry-After`, and time out slow requests with a configurable limit.
 - Test the configured OpenAI-compatible endpoint from the settings page.
 - Generate a structured JSON change plan for wiki updates.
 - Preview proposed changes before writing anything to your vault.
@@ -96,6 +97,7 @@ Open the plugin settings and configure:
 - **OpenAI API key**: API key for your OpenAI-compatible provider.
 - **OpenAI model**: model name to use.
 - **Auto ingest raw file changes**: disabled by default. When enabled, supported raw file changes are analyzed automatically after a short debounce and validated model changes are applied without opening the review modal.
+- **Request timeout (seconds)**: how long to wait for a model response before timing out. Defaults to 900 seconds; raise it for slow local or reasoning models, lower it for fast hosted models.
 
 Third-party OpenAI-compatible providers can be used as long as the URL points directly to their `/v1/chat/completions` endpoint. Use **Test OpenAI connection** in settings to check whether the configured endpoint returns HTTP 2xx for the current URL, key, and model.
 
