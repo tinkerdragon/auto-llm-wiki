@@ -10,7 +10,6 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
   assetsFolder: "raw/assets",
   indexPath: "wiki/index.md",
   logPath: "wiki/log.md",
-  provider: "openai",
   openAIApiUrl: "https://api.openai.com/v1/chat/completions",
   openAIApiKey: "",
   openAIModel: "gpt-4.1-mini",
@@ -42,9 +41,25 @@ export class LLMWikiSettingTab extends PluginSettingTab {
     this.addTextSetting(t("settings.openAIApiKey.name"), t("settings.openAIApiKey.desc"), "openAIApiKey", true);
     this.addTextSetting(t("settings.openAIModel.name"), t("settings.openAIModel.desc"), "openAIModel");
     this.addToggleSetting(t("settings.autoIngestEnabled.name"), t("settings.autoIngestEnabled.desc"), "autoIngestEnabled");
+    this.addDebounceSetting();
     this.addPollIntervalSetting();
     this.addTimeoutSetting();
     this.addOpenAIConnectionTest();
+  }
+
+  private addDebounceSetting(): void {
+    new Setting(this.containerEl)
+      .setName(t("settings.autoIngestDebounce.name"))
+      .setDesc(t("settings.autoIngestDebounce.desc"))
+      .addText((text) => {
+        text.setValue(String(Math.round(this.plugin.settings.autoIngestDebounceMs / 1000)));
+        text.onChange(async (value) => {
+          const seconds = Number(value.trim());
+          if (!Number.isFinite(seconds) || seconds < 0) return;
+          this.plugin.settings = { ...this.plugin.settings, autoIngestDebounceMs: Math.round(seconds * 1000) };
+          await this.plugin.saveSettings();
+        });
+      });
   }
 
   private addPollIntervalSetting(): void {

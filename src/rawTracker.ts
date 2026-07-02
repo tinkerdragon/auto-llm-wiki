@@ -119,6 +119,69 @@ export interface RawScanResult {
   stamps: RawFileState;
 }
 
+const RAW_SCAN_CONCURRENCY = 4;
+
+interface RawFileScan {
+  changed?: ChangedRawFile;
+  stamp?: RawFileStateEntry;
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  const worker = async (): Promise<void> => {
+    for (let index = cursor++; index < items.length; index = cursor++) {
+      results[index] = await fn(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
+async function scanRawFile(
+  app: App,
+  file: RawCandidateFile,
+  state: Record<string, StoredRawFileEntry>,
+  onPdfExtract?: (path: string) => void,
+  pdfOcrProvider?: PdfOcrProvider,
+  imageOcrProvider?: ImageOcrProvider
+): Promise<RawFileScan> {
+  const stat = readRawFileStat(file);
+  const recorded = normalizeRawFileEntry(state[file.path]);
+  // Fast-path: unchanged mtime+size means unchanged content, so skip read/hash entirely.
+  // Limitation: a content change that preserves BOTH mtime and size (e.g. an in-place
+  // same-length edit, or a sync tool run with --times) is not detected here.
+  if (recorded && stat && recorded.mtime === stat.mtime && recorded.size === stat.size) {
+    return {};
+  }
+
+  // Content is confirmed unchanged but stat drifted (or was legacy/absent): refresh the
+  // recorded mtime/size so the fast-path can engage next scan instead of re-hashing forever.
+  const restamp = (hash: string): RawFileScan => (stat ? { stamp: { hash, mtime: stat.mtime, size: stat.size } } : {});
+  const changed = (content: string, hash: string): RawFileScan => ({
+    changed: { path: file.path, content, hash, mtime: stat?.mtime, size: stat?.size }
+  });
+
+  if (isOpenXmlRawPath(file.path)) {
+    const binaryBuffer = await app.vault.readBinary(file as TFile);
+    const hash = await hashOpenXmlContent(binaryBuffer);
+    if (recorded?.hash === hash) return restamp(hash);
+    return changed(await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider), hash);
+  }
+
+  if (isImageRawPath(file.path) || isPdfRawPath(file.path) || isBinaryOfficeRawPath(file.path)) {
+    const binaryBuffer = await app.vault.readBinary(file as TFile);
+    const hash = hashBinaryContent(binaryBuffer);
+    if (recorded?.hash === hash) return restamp(hash);
+    return changed(await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider), hash);
+  }
+
+  const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
+  const hash = hashContent(content);
+  return recorded?.hash !== hash ? changed(content, hash) : restamp(hash);
+}
+
 export async function findChangedRawFiles(
   app: App,
   settings: LLMWikiSettings,
@@ -128,51 +191,16 @@ export async function findChangedRawFiles(
   imageOcrProvider?: ImageOcrProvider
 ): Promise<RawScanResult> {
   const rawFiles = findRawFileCandidates(app.vault.getFiles(), settings).sourceFiles;
+  const scans = await mapWithConcurrency(rawFiles, RAW_SCAN_CONCURRENCY, (file) =>
+    scanRawFile(app, file, state, onPdfExtract, pdfOcrProvider, imageOcrProvider)
+  );
 
   const changedFiles: ChangedRawFile[] = [];
   const stamps: RawFileState = {};
-  for (const file of rawFiles) {
-    const stat = readRawFileStat(file);
-    const recorded = normalizeRawFileEntry(state[file.path]);
-    // Fast-path: unchanged mtime+size means unchanged content, so skip read/hash entirely.
-    // Limitation: a content change that preserves BOTH mtime and size (e.g. an in-place
-    // same-length edit, or a sync tool run with --times) is not detected here.
-    if (recorded && stat && recorded.mtime === stat.mtime && recorded.size === stat.size) {
-      continue;
-    }
-
-    // Content is confirmed unchanged but stat drifted (or was legacy/absent): refresh the
-    // recorded mtime/size so the fast-path can engage next scan instead of re-hashing forever.
-    const restamp = (hash: string) => {
-      if (stat) stamps[file.path] = { hash, mtime: stat.mtime, size: stat.size };
-    };
-
-    if (isOpenXmlRawPath(file.path)) {
-      const binaryBuffer = await app.vault.readBinary(file as TFile);
-      const hash = await hashOpenXmlContent(binaryBuffer);
-      if (recorded?.hash === hash) { restamp(hash); continue; }
-      const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
-      changedFiles.push({ path: file.path, content, hash, mtime: stat?.mtime, size: stat?.size });
-      continue;
-    }
-
-    if (isImageRawPath(file.path) || isPdfRawPath(file.path) || isBinaryOfficeRawPath(file.path)) {
-      const binaryBuffer = await app.vault.readBinary(file as TFile);
-      const hash = hashBinaryContent(binaryBuffer);
-      if (recorded?.hash === hash) { restamp(hash); continue; }
-      const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
-      changedFiles.push({ path: file.path, content, hash, mtime: stat?.mtime, size: stat?.size });
-      continue;
-    }
-
-    const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
-    const hash = hashContent(content);
-    if (recorded?.hash !== hash) {
-      changedFiles.push({ path: file.path, content, hash, mtime: stat?.mtime, size: stat?.size });
-    } else {
-      restamp(hash);
-    }
-  }
+  scans.forEach((scan, index) => {
+    if (scan.changed) changedFiles.push(scan.changed);
+    if (scan.stamp) stamps[rawFiles[index].path] = scan.stamp;
+  });
   return { changed: changedFiles, stamps };
 }
 

@@ -4,13 +4,30 @@ import { ChangePlan, FileOperation, LLMWikiSettings } from "./types";
 const ALLOWED_KINDS = new Set(["create", "update", "append", "prepend"]);
 
 export function parseChangePlan(text: string): ChangePlan {
-  const json = stripFences(text.trim());
-  const parsed = JSON.parse(json) as unknown;
+  const parsed = extractJsonObject(text);
   if (!isRecord(parsed) || typeof parsed.summary !== "string" || !Array.isArray(parsed.operations)) {
     throw new Error(t("error.invalidChangePlanShape"));
   }
   const operations = parsed.operations.map(assertOperationShape);
   return { summary: parsed.summary, operations };
+}
+
+// Tolerate prose around the JSON: strip a whole-string code fence, else fall back to the
+// outermost {...} object so a chatty model reply still yields a parseable change plan.
+function extractJsonObject(text: string): unknown {
+  const stripped = stripFences(text.trim());
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    const start = stripped.indexOf("{");
+    const end = stripped.lastIndexOf("}");
+    if (start < 0 || end <= start) return undefined;
+    try {
+      return JSON.parse(stripped.slice(start, end + 1));
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 export function validateChangePlan(plan: ChangePlan, settings: LLMWikiSettings): ChangePlan {

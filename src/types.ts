@@ -1,5 +1,3 @@
-export type LLMProviderId = "openai";
-
 export interface RawFileStateEntry {
   hash: string;
   mtime: number;
@@ -18,7 +16,6 @@ export interface LLMWikiSettings {
   assetsFolder: string;
   indexPath: string;
   logPath: string;
-  provider: LLMProviderId;
   openAIApiUrl: string;
   openAIApiKey: string;
   openAIModel: string;

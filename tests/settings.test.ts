@@ -47,6 +47,16 @@ test("auto ingest poll interval defaults to 15 seconds", () => {
   expect(DEFAULT_SETTINGS.autoIngestPollSeconds).toBe(15);
 });
 
+test("settings tab renders the auto ingest debounce control", () => {
+  const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
+  const tab = new LLMWikiSettingTab({} as never, plugin);
+
+  tab.display();
+
+  const texts = (tab.containerEl as unknown as { texts: string[] }).texts;
+  expect(texts).toContain("Auto ingest debounce (seconds)");
+});
+
 test("settings tab renders the auto ingest poll interval control", () => {
   const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
   const tab = new LLMWikiSettingTab({} as never, plugin);

@@ -98,6 +98,7 @@ Open the plugin settings and configure:
 - **OpenAI API key**: API key for your OpenAI-compatible provider.
 - **OpenAI model**: model name to use.
 - **Auto ingest raw file changes**: disabled by default. When enabled, supported raw file changes are analyzed automatically after a short debounce and validated model changes are applied without opening the review modal.
+- **Auto ingest debounce (seconds)**: when auto ingest is on, how long to wait after the last file change before analyzing. Defaults to 3.
 - **Auto ingest poll interval (seconds)**: when auto ingest is on, how often to scan the raw folder for changes made outside Obsidian (e.g. dragged-in files, which do not fire file events). Defaults to 15; set 0 to disable polling.
 - **Request timeout (seconds)**: how long to wait for a model response before timing out. Defaults to 900 seconds; raise it for slow local or reasoning models, lower it for fast hosted models.
 

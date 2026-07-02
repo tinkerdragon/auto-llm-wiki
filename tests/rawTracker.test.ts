@@ -134,6 +134,23 @@ test("migrateRawFileState keeps existing entry objects and defaults missing data
   });
 });
 
+test("findChangedRawFiles scans many files and preserves input order", async () => {
+  const files = Array.from({ length: 6 }, (_, i) => ({ path: `raw/${i}.md` }));
+  const contentByPath: Record<string, string> = {};
+  files.forEach((file, i) => { contentByPath[file.path] = `content-${i}`; });
+  const app = {
+    vault: {
+      getFiles: () => files,
+      read: async (file: { path: string }) => contentByPath[file.path]
+    }
+  };
+
+  const { changed } = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {});
+
+  expect(changed.map((file) => file.path)).toEqual(files.map((file) => file.path));
+  expect(changed.map((file) => file.content)).toEqual(files.map((_, i) => `content-${i}`));
+});
+
 test("findChangedRawFiles returns new and changed markdown files only", async () => {
   const files = [
     { path: "raw/new.md" },

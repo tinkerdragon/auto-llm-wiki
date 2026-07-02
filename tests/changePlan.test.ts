@@ -12,6 +12,17 @@ test("parses fenced json change plans", () => {
   expect(plan.operations).toEqual([]);
 });
 
+test("parses a change plan wrapped in surrounding prose", () => {
+  const plan = parseChangePlan("Sure! Here is the plan:\n{\"summary\":\"ok\",\"operations\":[]}\nHope that helps.");
+  expect(plan.summary).toBe("ok");
+  expect(plan.operations).toEqual([]);
+});
+
+test("parses a fenced change plan with surrounding prose", () => {
+  const plan = parseChangePlan("Here you go:\n```json\n{\"summary\":\"ok\",\"operations\":[]}\n```\nDone.");
+  expect(plan.summary).toBe("ok");
+});
+
 test("rejects null change plans with localized shape error", () => {
   expect(() => parseChangePlan("null")).toThrow("Invalid change plan shape");
 });

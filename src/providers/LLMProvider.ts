@@ -21,4 +21,6 @@ export interface ConnectionTestRequest {
 
 export interface LLMProvider {
   complete(request: CompleteRequest): Promise<string>;
+  completeVision(request: VisionCompleteRequest): Promise<string>;
+  testConnection(request: ConnectionTestRequest): Promise<void>;
 }
