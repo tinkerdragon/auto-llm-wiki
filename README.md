@@ -8,11 +8,13 @@ Auto LLM Wiki is an Obsidian plugin for maintaining a Karpathy-style LLM Wiki. I
 
 - Scan the configured raw source folder for new or changed Markdown, plain text, CSV/TSV, code, HTML, PDF, image, DOC/DOCX, XLS/XLSX, PPT/PPTX, and RTF files.
 - Extract text from text-layer PDFs, HTML pages, Office documents, spreadsheets, presentations, and RTF files; fall back to vision OCR for scanned/image-only PDF pages, image-only PPTX slides, and supported image files.
-- Track raw file content hashes so unchanged sources are skipped on later runs.
+- Detect changes via file mtime, size, and content hash, scanning changed files concurrently, so unchanged sources are skipped cheaply.
 - Send only new or changed raw files to an OpenAI-compatible chat completions endpoint.
+- Optionally auto-ingest changes on Obsidian file events and on a polling interval that also catches files changed outside Obsidian.
 - Retry transient endpoint errors (network, 429, 5xx) with backoff, honor `Retry-After`, and time out slow requests with a configurable limit.
 - Test the configured OpenAI-compatible endpoint from the settings page.
 - Generate a structured JSON change plan for wiki updates.
+- Answer questions with index-first retrieval (read the index, then drill into relevant pages) and file worthwhile answers back into the wiki.
 - Preview proposed changes before writing anything to your vault.
 - Apply changes only after user confirmation.
 - Apply change plans atomically: validate the whole plan first and roll back on failure so the vault is never left half-written.
