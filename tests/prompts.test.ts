@@ -31,6 +31,21 @@ test("ingest prompt uses Simplified Chinese output instruction for zh locale", (
   expect(prompt).toContain("Write user-visible natural-language output in Simplified Chinese.");
 });
 
+test("ingest and query prompts do not offer the destructive delete operation", () => {
+  const ingest = buildIngestPrompt({ index: "# Index", log: "# Log", sourcePath: "raw/a.md", sourceContent: "hello" });
+  const query = buildQueryPrompt({ index: "# Index", log: "# Log", question: "Q", wikiPages: [] });
+  expect(ingest).not.toContain('"kind": "delete"');
+  expect(ingest).toContain("create, update, append, or prepend");
+  expect(query).not.toContain('"kind": "delete"');
+  expect(query).toContain("create, update, append, or prepend");
+});
+
+test("only the lint prompt offers the delete operation in its contract", () => {
+  const lint = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [], rawPaths: [] });
+  expect(lint).toContain('"kind": "delete"');
+  expect(lint).toContain("create, update, append, prepend, or delete");
+});
+
 test("query prompt includes question and asks for saveable result", () => {
   const prompt = buildQueryPrompt({ index: "# Index", log: "", question: "What changed?", wikiPages: [] });
   expect(prompt).toContain("What changed?");
@@ -60,9 +75,37 @@ test("json contract lists the delete operation", () => {
   expect(prompt).toContain("delete");
 });
 
-test("lint prompt allows removing orphan pages with no supporting source", () => {
-  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [] });
-  expect(prompt).toContain("Remove orphan pages that no longer have any supporting source");
+test("lint prompt defines an orphan as a page whose raw source was removed and asks to delete it", () => {
+  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [], rawPaths: [] });
+  // Pin the distinctive orphan-definition prose, not tokens the JSON contract always contains.
+  expect(prompt).toContain("no longer fully backed by an existing raw source");
+  expect(prompt).toContain("propose a delete operation (it is a true orphan)");
+});
+
+test("lint prompt lists the current raw sources so orphans can be detected", () => {
+  const prompt = buildLintPrompt({
+    index: "# Index",
+    log: "# Log",
+    wikiPages: [{ path: "wiki/a.md", content: "A" }],
+    rawPaths: ["raw/kept.pdf", "raw/notes.md"]
+  });
+  expect(prompt).toContain("raw/kept.pdf");
+  expect(prompt).toContain("raw/notes.md");
+});
+
+test("lint prompt does not ask to save a report as a wiki page", () => {
+  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [], rawPaths: [] });
+  expect(prompt).not.toContain("Save the report");
+});
+
+test("lint reconciles the wiki as a synthesis, preferring revision over deletion", () => {
+  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [], rawPaths: [] });
+  // Karpathy: the wiki is distilled from many sources, so a lost source should usually trigger a
+  // revising update, not a wholesale page delete. Pin the distinctive reconcile prose.
+  expect(prompt).toContain("reconcile the wiki");
+  expect(prompt).toContain("synthesis distilled from");
+  expect(prompt).toContain("propose an update instead");
+  expect(prompt).toContain("Prefer revising over deleting");
 });
 
 test("lint prompt separates wiki pages with a blank line", () => {
@@ -100,6 +143,16 @@ test("parseSelectedQueryPages keeps only known paths and caps the count", () => 
 
 test("parseSelectedQueryPages parses fenced JSON", () => {
   const selected = parseSelectedQueryPages("```json\n[\"wiki/a.md\"]\n```", ["wiki/a.md", "wiki/b.md"], 5);
+  expect(selected).toEqual(["wiki/a.md"]);
+});
+
+test("parseSelectedQueryPages tolerates a bracket in trailing prose", () => {
+  const selected = parseSelectedQueryPages('["wiki/a.md"] see also [notes]', ["wiki/a.md", "wiki/b.md"], 5);
+  expect(selected).toEqual(["wiki/a.md"]);
+});
+
+test("parseSelectedQueryPages extracts an array wrapped in an object", () => {
+  const selected = parseSelectedQueryPages('{"pages":["wiki/a.md"]}', ["wiki/a.md", "wiki/b.md"], 5);
   expect(selected).toEqual(["wiki/a.md"]);
 });
 

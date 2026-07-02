@@ -151,6 +151,27 @@ test("uses the configured request timeout for completions", async () => {
   expect(notices).toContain("OpenAI request timed out. Check your connection or try again.");
 }, 2000);
 
+test("auto-ingest routes a delete-containing plan to review instead of auto-applying", async () => {
+  jest.spyOn(obsidian, "requestUrl").mockResolvedValue({
+    status: 200,
+    text: JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+      summary: "prune",
+      operations: [{ kind: "delete", path: "wiki/orphan.md", rationale: "orphan" }]
+    }) } }] })
+  } as never);
+  const { plugin, files } = setup(
+    [{ path: "raw/note.md", content: "hello" }],
+    { openAIApiKey: "key", rawFileState: {} }
+  );
+  files.set("wiki/orphan.md", { path: "wiki/orphan.md", content: "old" });
+
+  await plugin.onload();
+  await (plugin as unknown as { runAutoIngest(quiet: boolean): Promise<void> }).runAutoIngest(true);
+
+  expect(modals.length).toBeGreaterThan(0);
+  expect(files.has("wiki/orphan.md")).toBe(true);
+});
+
 test("re-stamps an unchanged legacy-state file so later scans can fast-path", async () => {
   const requestSpy = jest.spyOn(obsidian, "requestUrl");
   const { plugin, reads, savedData } = setup(

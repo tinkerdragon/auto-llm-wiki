@@ -47,4 +47,6 @@ export interface WikiContext {
   sources?: Array<{ path: string; content: string }>;
   question?: string;
   wikiPages?: Array<{ path: string; content: string }>;
+  /** Paths of raw sources that still exist, so lint can detect orphaned wiki pages. */
+  rawPaths?: string[];
 }

@@ -86,7 +86,7 @@ export class ChangePlanPreviewModal extends Modal {
       path.addClass("auto-llm-wiki-path-pill");
 
       section.createEl("p", { text: operation.rationale });
-      if (operation.content) {
+      if (operation.kind !== "delete") {
         const preview = section.createEl("pre", { text: operation.content });
         preview.addClass("auto-llm-wiki-code-preview");
         this.applyStyles(preview, {

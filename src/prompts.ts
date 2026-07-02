@@ -1,4 +1,5 @@
 import { t, getOutputLanguageName } from "./i18n";
+import { extractJsonArray } from "./jsonExtract";
 import { DEFAULT_SETTINGS } from "./settings";
 import { LLMWikiSettings, WikiContext } from "./types";
 
@@ -6,18 +7,27 @@ function outputLanguageInstruction(): string {
   return t("prompt.outputLanguageInstruction", { language: getOutputLanguageName() });
 }
 
-function buildJsonContract(settings: LLMWikiSettings): string {
+// `allowDelete` is enabled only for lint: delete is destructive and belongs to the reconcile
+// pass, not to ingest/query (which should only create/update pages). Offering delete to the
+// auto-ingest flow would also make plans defer to manual review and re-run every poll.
+function buildJsonContract(settings: LLMWikiSettings, allowDelete = false): string {
+  const deleteExample = allowDelete
+    ? `,\n    { "kind": "delete", "path": "${settings.wikiFolder}/obsolete.md", "rationale": "why this page is removed" }`
+    : "";
+  const kinds = allowDelete ? "create, update, append, prepend, or delete" : "create, update, append, or prepend";
+  const deleteNote = allowDelete
+    ? ` delete removes a page inside ${settings.wikiFolder}/ and takes no content — use it only for orphaned or fully superseded pages.`
+    : "";
   return `Return only JSON with this shape:
 {
   "summary": "short human-readable summary",
   "operations": [
     { "kind": "create", "path": "${settings.wikiFolder}/example.md", "content": "markdown", "rationale": "why this file changes" },
     { "kind": "update", "path": "${settings.indexPath}", "content": "full replacement markdown", "rationale": "why this file changes" },
-    { "kind": "prepend", "path": "${settings.logPath}", "content": "newest-first markdown log entry", "rationale": "why this file changes" },
-    { "kind": "delete", "path": "${settings.wikiFolder}/obsolete.md", "rationale": "why this page is removed" }
+    { "kind": "prepend", "path": "${settings.logPath}", "content": "newest-first markdown log entry", "rationale": "why this file changes" }${deleteExample}
   ]
 }
-Use only create, update, append, prepend, or delete. delete removes a page inside ${settings.wikiFolder}/ and takes no content — use it only for orphaned or fully superseded pages. Write only inside ${settings.wikiFolder}/. Use ${settings.indexPath} for the content index and ${settings.logPath} for the newest-first chronological log. Use prepend for new entries in ${settings.logPath}. Treat ${settings.rawFolder}/ and ${settings.assetsFolder}/ as read-only.`;
+Use only ${kinds}.${deleteNote} Write only inside ${settings.wikiFolder}/. Use ${settings.indexPath} for the content index and ${settings.logPath} for the newest-first chronological log. Use prepend for new entries in ${settings.logPath}. Treat ${settings.rawFolder}/ and ${settings.assetsFolder}/ as read-only.`;
 }
 
 export function buildIngestPrompt(context: WikiContext, settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
@@ -83,27 +93,17 @@ export function parseSelectedQueryPages(response: string, availablePaths: string
   return deduped.length > 0 ? deduped.slice(0, limit) : availablePaths.slice(0, limit);
 }
 
-function extractJsonArray(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\[[\s\S]*\]/);
-    if (!match) return undefined;
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      return undefined;
-    }
-  }
-}
-
 export function buildLintPrompt(context: WikiContext, settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
-  return `You lint a persistent LLM Wiki. Look for contradictions, stale claims, orphan pages, missing cross-references, important concepts without pages, and data gaps. Remove orphan pages that no longer have any supporting source with a delete operation. Save the report as a wiki markdown page if useful.
+  return `You lint a persistent LLM Wiki. Raw sources in ${settings.rawFolder}/ are the ground truth, and the wiki is a synthesis distilled from them — a page usually draws on several sources and is rarely a 1:1 mirror of one file. Your job is to reconcile the wiki with the CURRENT set of raw sources listed below, and to fix contradictions, stale claims, missing cross-references, important concepts without pages, and data gaps.
+
+When a page is no longer fully backed by an existing raw source, judge it page by page instead of deleting blindly:
+- If the page only mirrored a source that was removed and nothing of value remains, propose a delete operation (it is a true orphan).
+- If the page still synthesizes other present sources, or holds conclusions and cross-references that still stand, propose an update instead: drop the claims that lost their source, keep what remains valid, and note the resulting gap.
+Prefer revising over deleting; delete a page only when it would otherwise be empty or meaningless. Do not save a lint report as a wiki page — put all findings in the summary field only.
 
 ${outputLanguageInstruction()}
 
-${buildJsonContract(settings)}
+${buildJsonContract(settings, true)}
 
 Current index:
 ${context.index}
@@ -111,8 +111,15 @@ ${context.index}
 Current log:
 ${context.log}
 
+Current raw sources (${settings.rawFolder}/):
+${formatRawPaths(context.rawPaths ?? [])}
+
 Wiki pages:
 ${formatWikiPages(context.wikiPages ?? [])}`;
+}
+
+function formatRawPaths(paths: string[]): string {
+  return paths.length > 0 ? paths.join("\n") : "(none)";
 }
 
 function formatWikiPages(pages: Array<{ path: string; content: string }>): string {

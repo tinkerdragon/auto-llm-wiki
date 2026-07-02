@@ -330,7 +330,7 @@ test("findChangedRawFiles falls back to OCR when a PDF has no text layer", async
   ]);
 });
 
-test("findChangedRawFiles reports PDFs without extractable text", async () => {
+test("findChangedRawFiles isolates a PDF with no extractable text into failed", async () => {
   jest.spyOn(obsidian, "loadPdfJs").mockResolvedValue({
     getDocument: () => ({
       promise: Promise.resolve({
@@ -346,8 +346,48 @@ test("findChangedRawFiles reports PDFs without extractable text", async () => {
     }
   };
 
-  await expect(findChangedRawFiles(app as never, DEFAULT_SETTINGS, {}))
-    .rejects.toThrow("No extractable text found in PDF: raw/scanned.pdf");
+  const { changed, failed } = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {});
+
+  expect(changed).toEqual([]);
+  expect(failed.map((failure) => failure.path)).toEqual(["raw/scanned.pdf"]);
+  expect(failed[0].message).toContain("raw/scanned.pdf");
+});
+
+test("findChangedRawFiles ingests good files even when a sibling file fails", async () => {
+  const contentByPath: Record<string, string> = { "raw/good.md": "good" };
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/bad.md" }, { path: "raw/good.md" }],
+      read: async (file: { path: string }) => {
+        if (file.path === "raw/bad.md") throw new Error("read failed");
+        return contentByPath[file.path];
+      }
+    }
+  };
+
+  const { changed, failed } = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, {});
+
+  expect(changed).toEqual([{ path: "raw/good.md", content: "good", hash: hashContent("good") }]);
+  expect(failed.map((failure) => failure.path)).toEqual(["raw/bad.md"]);
+});
+
+test("treats a legacy 8-char hash as unchanged and restamps to the wide hash", async () => {
+  const content = "legacy content";
+  // The legacy 32-bit FNV-1a hash equals the first 8 hex chars of the current 16-char hash.
+  const legacyHash = hashContent(content).slice(0, 8);
+  const app = {
+    vault: {
+      getFiles: () => [{ path: "raw/note.md", stat: { mtime: 5, size: 3 } }],
+      read: async () => content
+    }
+  };
+  // Drifted mtime/size so the stat fast-path can't short-circuit and the hash is compared.
+  const state = { "raw/note.md": { hash: legacyHash, mtime: 1, size: 2 } };
+
+  const { changed, stamps } = await findChangedRawFiles(app as never, DEFAULT_SETTINGS, state);
+
+  expect(changed).toEqual([]);
+  expect(stamps["raw/note.md"]).toEqual({ hash: hashContent(content), mtime: 5, size: 3 });
 });
 
 test("findChangedRawFiles skips PDF parsing and OCR for unchanged raw PDFs", async () => {

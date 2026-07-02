@@ -107,6 +107,14 @@
   background: var(--color-purple);
 }
 
+.auto-llm-wiki-operation-prepend {
+  background: var(--color-cyan);
+}
+
+.auto-llm-wiki-operation-delete {
+  background: var(--color-red);
+}
+
 .auto-llm-wiki-path-pill {
   min-width: 0;
   padding: 5px 9px;

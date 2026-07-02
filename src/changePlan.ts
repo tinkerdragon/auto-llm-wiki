@@ -1,33 +1,33 @@
 import { t } from "./i18n";
+import { extractJsonObject } from "./jsonExtract";
 import { ChangePlan, FileOperation, LLMWikiSettings } from "./types";
 
 const ALLOWED_KINDS = new Set(["create", "update", "append", "prepend", "delete"]);
 
-export function parseChangePlan(text: string): ChangePlan {
-  const parsed = extractJsonObject(text);
-  if (!isRecord(parsed) || typeof parsed.summary !== "string" || !Array.isArray(parsed.operations)) {
-    throw new Error(t("error.invalidChangePlanShape"));
-  }
-  const operations = parsed.operations.map(assertOperationShape);
-  return { summary: parsed.summary, operations };
+// A change plan is a record with a string summary and an operations array. Passed to the JSON
+// extractor so a shape-valid example/preamble object cannot be mistaken for the real plan.
+function isChangePlanShape(value: unknown): boolean {
+  return isRecord(value) && typeof value.summary === "string" && Array.isArray(value.operations);
 }
 
-// Tolerate prose around the JSON: strip a whole-string code fence, else fall back to the
-// outermost {...} object so a chatty model reply still yields a parseable change plan.
-function extractJsonObject(text: string): unknown {
-  const stripped = stripFences(text.trim());
-  try {
-    return JSON.parse(stripped);
-  } catch {
-    const start = stripped.indexOf("{");
-    const end = stripped.lastIndexOf("}");
-    if (start < 0 || end <= start) return undefined;
-    try {
-      return JSON.parse(stripped.slice(start, end + 1));
-    } catch {
-      return undefined;
-    }
+export function parseChangePlan(text: string): ChangePlan {
+  const parsed = extractJsonObject(text, isChangePlanShape);
+  if (!isChangePlanShape(parsed)) {
+    throw new Error(t("error.invalidChangePlanShape"));
   }
+  const record = parsed as { summary: string; operations: unknown[] };
+  const operations = record.operations.map(assertOperationShape);
+  return { summary: record.summary, operations };
+}
+
+// Whether an operation kind mutates or removes existing content destructively. Centralized so the
+// auto-apply gate, preview, and any future consumer share one definition of "needs review".
+export function isDestructiveOperationKind(kind: FileOperation["kind"]): boolean {
+  return kind === "delete";
+}
+
+export function planHasDestructiveOperation(plan: ChangePlan): boolean {
+  return plan.operations.some((operation) => isDestructiveOperationKind(operation.kind));
 }
 
 export function validateChangePlan(plan: ChangePlan, settings: LLMWikiSettings): ChangePlan {
@@ -42,6 +42,10 @@ export function validateChangePlan(plan: ChangePlan, settings: LLMWikiSettings):
     }
     if (isReadOnlyPath(normalized, settings)) {
       throw new Error(t("error.pathInsideReadOnly", { path: operation.path }));
+    }
+    if (operation.kind === "delete"
+      && (normalized === normalizePath(settings.indexPath) || normalized === normalizePath(settings.logPath))) {
+      throw new Error(t("error.cannotDeleteIndexOrLog", { path: operation.path }));
     }
   }
   return plan;
@@ -58,11 +62,6 @@ export function normalizePath(path: string): string {
     parts.push(part);
   }
   return parts.join("/");
-}
-
-function stripFences(text: string): string {
-  const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match ? match[1] : text;
 }
 
 function assertOperationShape(operation: unknown): FileOperation {

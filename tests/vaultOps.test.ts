@@ -180,6 +180,53 @@ test("pre-validates the plan and writes nothing when a create targets an existin
   expect(created).toEqual([]);
 });
 
+test("pre-validates the plan and writes nothing when a delete targets a missing file", async () => {
+  const deleted: string[] = [];
+  const app = {
+    vault: {
+      getAbstractFileByPath: () => null,
+      read: async () => "",
+      create: jest.fn(),
+      modify: jest.fn(),
+      delete: async (file: { path: string }) => { deleted.push(file.path); },
+      createFolder: async () => undefined
+    }
+  };
+
+  await expect(applyChangePlan(app as never, {
+    summary: "x",
+    operations: [{ kind: "delete", path: "wiki/missing.md", content: "", rationale: "r" }]
+  })).rejects.toThrow();
+
+  expect(deleted).toEqual([]);
+});
+
+test("pre-validates the plan and rejects a delete and a write on the same path", async () => {
+  const TFileMock = obsidian.TFile as unknown as { new(path: string): obsidian.TFile };
+  const store = new Map<string, string>([["wiki/a.md", "keep"]]);
+  const app = {
+    vault: {
+      getAbstractFileByPath: (path: string) => (store.has(path) ? new TFileMock(path) : null),
+      read: async (file: { path: string }) => store.get(file.path) ?? "",
+      create: jest.fn(),
+      modify: jest.fn(),
+      delete: jest.fn(),
+      createFolder: async () => undefined
+    }
+  };
+
+  await expect(applyChangePlan(app as never, {
+    summary: "x",
+    operations: [
+      { kind: "delete", path: "wiki/a.md", content: "", rationale: "r" },
+      { kind: "update", path: "wiki/a.md", content: "new", rationale: "r" }
+    ]
+  })).rejects.toThrow();
+
+  expect(app.vault.delete).not.toHaveBeenCalled();
+  expect(app.vault.modify).not.toHaveBeenCalled();
+});
+
 test("rejects writing to a path occupied by a folder", async () => {
   const app = {
     vault: {

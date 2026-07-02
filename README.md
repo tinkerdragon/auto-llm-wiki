@@ -149,7 +149,7 @@ Run:
 Lint Auto LLM Wiki
 ```
 
-The plugin asks the model to look for stale claims, contradictions, orphan pages, missing cross-references, and data gaps, and to remove orphan pages that no longer have any supporting source. Deletions are proposed in the change plan and applied only after you review them (following Karpathy's model: sources are immutable, and the wiki is pruned during lint rather than automatically when a source is deleted).
+The plugin asks the model to reconcile the wiki with the current raw sources and to look for stale claims, contradictions, missing cross-references, important concepts without pages, and data gaps. Because the wiki is a synthesis distilled from many sources, a page whose raw source was removed is usually revised — its now-unsupported claims dropped — rather than deleted; a page is deleted only when nothing of value would remain. Deletions are proposed in the change plan and applied only after you review them (following Karpathy's model: sources are immutable, and the wiki is reconciled during lint rather than automatically when a source is deleted).
 
 ## Safety model
 

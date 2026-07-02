@@ -92,7 +92,23 @@ export class Setting {
   }
 
   addText(callback: (text: { inputEl: { type: string }; setValue(value: string): void; onChange(callback: (value: string) => Promise<void>): void }) => void): this {
-    callback({ inputEl: { type: "text" }, setValue() {}, onChange() {} });
+    const input: {
+      value?: string;
+      onchange?: (value: string) => Promise<void>;
+      inputEl: { type: string };
+      setValue(value: string): void;
+      onChange(callback: (value: string) => Promise<void>): void;
+    } = {
+      inputEl: { type: "text" },
+      setValue(value: string) {
+        input.value = value;
+      },
+      onChange(callback: (value: string) => Promise<void>) {
+        input.onchange = callback;
+      }
+    };
+    (this.containerEl as { textInputs?: unknown[] }).textInputs?.push(input);
+    callback(input);
     return this;
   }
 
@@ -181,6 +197,7 @@ function createMockElement() {
   const element: {
     buttons: Array<{ onclick?: () => void | Promise<void>; disabled?: boolean; addClass(className?: string): void }>;
     toggles: Array<{ onchange?: (value: boolean) => Promise<void>; value?: boolean }>;
+    textInputs: Array<{ value?: string; onchange?: (value: string) => Promise<void> }>;
     texts: string[];
     classes: string[];
     styles: Record<string, string>;
@@ -195,6 +212,7 @@ function createMockElement() {
   } = {
     buttons: [],
     toggles: [],
+    textInputs: [],
     texts: [],
     classes: [],
     styles: {},
@@ -207,6 +225,7 @@ function createMockElement() {
       element.texts.length = 0;
       element.buttons.length = 0;
       element.toggles.length = 0;
+      element.textInputs.length = 0;
       element.classes.length = 0;
       element.styles = {};
     },
@@ -224,6 +243,7 @@ function createMockElement() {
       const child = createMockElement();
       child.buttons = element.buttons;
       child.toggles = element.toggles;
+      child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
       child.styles = element.styles;
@@ -234,6 +254,7 @@ function createMockElement() {
       const child = createMockElement();
       child.buttons = element.buttons;
       child.toggles = element.toggles;
+      child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
       child.styles = element.styles;
@@ -242,6 +263,9 @@ function createMockElement() {
     },
     createSpan() {
       const child = createMockElement();
+      child.buttons = element.buttons;
+      child.toggles = element.toggles;
+      child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
       child.styles = element.styles;

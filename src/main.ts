@@ -1,5 +1,5 @@
 import { EventRef, Notice, Plugin, TAbstractFile, TFile } from "obsidian";
-import { parseChangePlan, validateChangePlan } from "./changePlan";
+import { parseChangePlan, planHasDestructiveOperation, validateChangePlan } from "./changePlan";
 import { t } from "./i18n";
 import { buildIngestPrompt, buildLintPrompt, buildQueryPrompt, buildQuerySelectionPrompt, parseSelectedQueryPages } from "./prompts";
 import { OpenAIProvider, OpenAIProviderError } from "./providers/OpenAIProvider";
@@ -49,8 +49,13 @@ export default class LLMWikiPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     const data = await this.loadData() as (LLMWikiPluginData & Partial<LLMWikiSettings>) | undefined;
-    this.settings = { ...DEFAULT_SETTINGS, ...data };
-    this.rawFileState = migrateRawFileState(data?.rawFileState);
+    // Keep persisted-but-non-setting data (rawFileState) and the removed `provider` key out of
+    // the settings object so they aren't re-saved as if they were live settings.
+    const { rawFileState, ...rest } = data ?? {};
+    const settingsData: Record<string, unknown> = { ...rest };
+    delete settingsData.provider;
+    this.settings = { ...DEFAULT_SETTINGS, ...settingsData };
+    this.rawFileState = migrateRawFileState(rawFileState);
   }
 
   async saveSettings(): Promise<void> {
@@ -138,6 +143,13 @@ export default class LLMWikiPlugin extends Plugin {
         this.setStatus(message);
         if (!quiet) new Notice(message);
       }, (request) => this.ocrPdfPage(request), (request) => this.ocrImage(request));
+      if (scan.failed.length > 0) {
+        // Each message already names its file exactly once (see findChangedRawFiles).
+        const details = scan.failed.map((failure) => failure.message).join("; ");
+        const failedMessage = t("notice.rawScanFailed", { details });
+        this.setStatus(failedMessage);
+        if (!quiet) new Notice(failedMessage);
+      }
       // Persist refreshed mtime/size for confirmed-unchanged files immediately (cache
       // maintenance, independent of ingest) so the fast-path engages on later scans.
       if (Object.keys(scan.stamps).length > 0) {
@@ -146,8 +158,12 @@ export default class LLMWikiPlugin extends Plugin {
       }
       const changedRawFiles = scan.changed;
       if (changedRawFiles.length === 0) {
-        this.setStatus(t("status.noRawChanges"));
-        if (!quiet) new Notice(t("notice.noRawChanges"));
+        // Keep the failure surfaced as the final status when nothing else changed; only
+        // announce "no changes" when the scan was actually clean.
+        if (scan.failed.length === 0) {
+          this.setStatus(t("status.noRawChanges"));
+          if (!quiet) new Notice(t("notice.noRawChanges"));
+        }
         return;
       }
 
@@ -266,10 +282,13 @@ export default class LLMWikiPlugin extends Plugin {
     this.setStatus(readingMessage);
     new Notice(readingMessage);
     const wikiPages = await listMarkdownFiles(this.app, this.settings.wikiFolder);
+    const rawPaths = findRawFileCandidates(this.app.vault.getFiles(), this.settings)
+      .sourceFiles.map((file) => file.path).sort();
     const prompt = buildLintPrompt({
       index: await readTextFile(this.app, this.settings.indexPath),
       log: await readTextFile(this.app, this.settings.logPath),
-      wikiPages
+      wikiPages,
+      rawPaths
     }, this.settings);
     await this.runPrompt(prompt);
   }
@@ -294,7 +313,9 @@ export default class LLMWikiPlugin extends Plugin {
       this.setStatus(validatingMessage);
       new Notice(validatingMessage);
       const plan = validateChangePlan(parseChangePlan(response), this.settings);
-      if (autoApply) {
+      // Destructive plans always go through review even when auto-ingest would otherwise apply
+      // automatically (single source of truth: planHasDestructiveOperation).
+      if (autoApply && !planHasDestructiveOperation(plan)) {
         const applyingMessage = t("status.applyingChanges");
         this.setStatus(applyingMessage);
         new Notice(applyingMessage);

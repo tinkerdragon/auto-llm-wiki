@@ -41,52 +41,29 @@ export class LLMWikiSettingTab extends PluginSettingTab {
     this.addTextSetting(t("settings.openAIApiKey.name"), t("settings.openAIApiKey.desc"), "openAIApiKey", true);
     this.addTextSetting(t("settings.openAIModel.name"), t("settings.openAIModel.desc"), "openAIModel");
     this.addToggleSetting(t("settings.autoIngestEnabled.name"), t("settings.autoIngestEnabled.desc"), "autoIngestEnabled");
-    this.addDebounceSetting();
-    this.addPollIntervalSetting();
-    this.addTimeoutSetting();
+    // Debounce and timeout are stored in ms (factor 1000) but shown in seconds; poll is stored
+    // in seconds (factor 1). Timeout must be > 0; debounce and poll may be 0.
+    this.addSecondsSetting("settings.autoIngestDebounce", "autoIngestDebounceMs", 1000, true);
+    this.addSecondsSetting("settings.autoIngestPoll", "autoIngestPollSeconds", 1, true);
+    this.addSecondsSetting("settings.requestTimeout", "requestTimeoutMs", 1000, false);
     this.addOpenAIConnectionTest();
   }
 
-  private addDebounceSetting(): void {
+  private addSecondsSetting(
+    labelKey: "settings.autoIngestDebounce" | "settings.autoIngestPoll" | "settings.requestTimeout",
+    key: "autoIngestDebounceMs" | "autoIngestPollSeconds" | "requestTimeoutMs",
+    factor: number,
+    allowZero: boolean
+  ): void {
     new Setting(this.containerEl)
-      .setName(t("settings.autoIngestDebounce.name"))
-      .setDesc(t("settings.autoIngestDebounce.desc"))
+      .setName(t(`${labelKey}.name`))
+      .setDesc(t(`${labelKey}.desc`))
       .addText((text) => {
-        text.setValue(String(Math.round(this.plugin.settings.autoIngestDebounceMs / 1000)));
+        text.setValue(String(Math.round(this.plugin.settings[key] / factor)));
         text.onChange(async (value) => {
           const seconds = Number(value.trim());
-          if (!Number.isFinite(seconds) || seconds < 0) return;
-          this.plugin.settings = { ...this.plugin.settings, autoIngestDebounceMs: Math.round(seconds * 1000) };
-          await this.plugin.saveSettings();
-        });
-      });
-  }
-
-  private addPollIntervalSetting(): void {
-    new Setting(this.containerEl)
-      .setName(t("settings.autoIngestPoll.name"))
-      .setDesc(t("settings.autoIngestPoll.desc"))
-      .addText((text) => {
-        text.setValue(String(this.plugin.settings.autoIngestPollSeconds));
-        text.onChange(async (value) => {
-          const seconds = Number(value.trim());
-          if (!Number.isFinite(seconds) || seconds < 0) return;
-          this.plugin.settings = { ...this.plugin.settings, autoIngestPollSeconds: Math.round(seconds) };
-          await this.plugin.saveSettings();
-        });
-      });
-  }
-
-  private addTimeoutSetting(): void {
-    new Setting(this.containerEl)
-      .setName(t("settings.requestTimeout.name"))
-      .setDesc(t("settings.requestTimeout.desc"))
-      .addText((text) => {
-        text.setValue(String(Math.round(this.plugin.settings.requestTimeoutMs / 1000)));
-        text.onChange(async (value) => {
-          const seconds = Number(value.trim());
-          if (!Number.isFinite(seconds) || seconds <= 0) return;
-          this.plugin.settings = { ...this.plugin.settings, requestTimeoutMs: Math.round(seconds * 1000) };
+          if (!Number.isFinite(seconds) || seconds < 0 || (!allowZero && seconds === 0)) return;
+          this.plugin.settings = { ...this.plugin.settings, [key]: Math.round(seconds * factor) };
           await this.plugin.saveSettings();
         });
       });

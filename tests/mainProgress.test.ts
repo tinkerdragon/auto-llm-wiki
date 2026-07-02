@@ -392,8 +392,13 @@ test("OCR provider failures are localized at the ingest UI boundary", async () =
   await plugin.onload();
   await (plugin as unknown as { ingestActiveSource(): Promise<void> }).ingestActiveSource();
 
-  expect(plugin.statusBarItems[0].text).toBe("Auto LLM Wiki：错误 - 解析原始文件失败：raw/scanned.pdf：OpenAI 请求失败：401 bad key");
-  expect(notices).toContain("解析原始文件失败：raw/scanned.pdf：OpenAI 请求失败：401 bad key");
+  // Per-file isolation: the OCR failure is captured for raw/scanned.pdf and surfaced via the
+  // "skipped unreadable" notice (carrying the underlying error) instead of aborting the scan.
+  const expectedNotice = "Auto LLM Wiki：已跳过无法读取的原始文件——解析原始文件失败：raw/scanned.pdf：OpenAI 请求失败：401 bad key";
+  expect(plugin.statusBarItems[0].text).toBe(expectedNotice);
+  expect(notices).toContain(expectedNotice);
+  // The path must appear exactly once (no double-qualification from re-prepending the path).
+  expect(expectedNotice.split("raw/scanned.pdf").length - 1).toBe(1);
 });
 
 test("runPrompt localizes OpenAI request failures at the UI boundary", async () => {

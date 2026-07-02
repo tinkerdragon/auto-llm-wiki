@@ -85,6 +85,13 @@ export function hashContent(content: string): string {
   return hash64(content.length, (index) => content.charCodeAt(index));
 }
 
+// A legacy 8-char hash (a single 32-bit FNV-1a digest) is exactly the first 8 hex chars of the
+// current 16-char hash, so a recorded legacy hash that prefixes the new hash means the content
+// is unchanged — restamp with the wider hash rather than re-ingesting on the format upgrade.
+function hashMatchesRecorded(recorded: string, current: string): boolean {
+  return recorded === current || (recorded.length === 8 && current.startsWith(recorded));
+}
+
 export function hashBinaryContent(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   return hash64(bytes.length, (index) => bytes[index]);
@@ -121,7 +128,15 @@ export interface RawScanResult {
   changed: ChangedRawFile[];
   /** Files confirmed unchanged whose recorded mtime/size drifted and should be refreshed. */
   stamps: RawFileState;
+  /** Files that could not be read/parsed this scan; isolated so they do not abort the rest. */
+  failed: Array<{ path: string; message: string }>;
 }
+
+// Discriminated union: a per-file scan either produced a result or failed with a message.
+// Modeling it this way makes "no scan and no error" unrepresentable.
+type RawFileScanOutcome =
+  | { path: string; scan: RawFileScan }
+  | { path: string; error: string };
 
 const RAW_SCAN_CONCURRENCY = 4;
 
@@ -167,23 +182,25 @@ async function scanRawFile(
     changed: { path: file.path, content, hash, mtime: stat?.mtime, size: stat?.size }
   });
 
+  const matchesRecorded = (hash: string): boolean => !!recorded && hashMatchesRecorded(recorded.hash, hash);
+
   if (isOpenXmlRawPath(file.path)) {
     const binaryBuffer = await app.vault.readBinary(file as TFile);
     const hash = await hashOpenXmlContent(binaryBuffer);
-    if (recorded?.hash === hash) return restamp(hash);
+    if (matchesRecorded(hash)) return restamp(hash);
     return changed(await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider), hash);
   }
 
   if (isImageRawPath(file.path) || isPdfRawPath(file.path) || isBinaryOfficeRawPath(file.path)) {
     const binaryBuffer = await app.vault.readBinary(file as TFile);
     const hash = hashBinaryContent(binaryBuffer);
-    if (recorded?.hash === hash) return restamp(hash);
+    if (matchesRecorded(hash)) return restamp(hash);
     return changed(await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider), hash);
   }
 
   const content = await readRawFileContent(app, file as TFile, onPdfExtract, pdfOcrProvider, imageOcrProvider);
   const hash = hashContent(content);
-  return recorded?.hash !== hash ? changed(content, hash) : restamp(hash);
+  return matchesRecorded(hash) ? restamp(hash) : changed(content, hash);
 }
 
 export async function findChangedRawFiles(
@@ -195,17 +212,32 @@ export async function findChangedRawFiles(
   imageOcrProvider?: ImageOcrProvider
 ): Promise<RawScanResult> {
   const rawFiles = findRawFileCandidates(app.vault.getFiles(), settings).sourceFiles;
-  const scans = await mapWithConcurrency(rawFiles, RAW_SCAN_CONCURRENCY, (file) =>
-    scanRawFile(app, file, state, onPdfExtract, pdfOcrProvider, imageOcrProvider)
-  );
+  // Isolate per-file failures: one corrupt/unreadable file (or a failed OCR call) must not
+  // abort the whole scan or discard siblings' results.
+  const outcomes = await mapWithConcurrency<RawCandidateFile, RawFileScanOutcome>(rawFiles, RAW_SCAN_CONCURRENCY, async (file) => {
+    try {
+      return { path: file.path, scan: await scanRawFile(app, file, state, onPdfExtract, pdfOcrProvider, imageOcrProvider) };
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      // Name the file exactly once: parser/OCR errors already embed the path (rawParseFailed);
+      // lower-level errors (readBinary, JSZip) do not, so prepend it only when missing.
+      const message = raw.includes(file.path) ? raw : `${file.path}: ${raw}`;
+      return { path: file.path, error: message };
+    }
+  });
 
   const changedFiles: ChangedRawFile[] = [];
   const stamps: RawFileState = {};
-  scans.forEach((scan, index) => {
-    if (scan.changed) changedFiles.push(scan.changed);
-    if (scan.stamp) stamps[rawFiles[index].path] = scan.stamp;
-  });
-  return { changed: changedFiles, stamps };
+  const failed: Array<{ path: string; message: string }> = [];
+  for (const outcome of outcomes) {
+    if ("error" in outcome) {
+      failed.push({ path: outcome.path, message: outcome.error });
+      continue;
+    }
+    if (outcome.scan.changed) changedFiles.push(outcome.scan.changed);
+    if (outcome.scan.stamp) stamps[outcome.path] = outcome.scan.stamp;
+  }
+  return { changed: changedFiles, stamps, failed };
 }
 
 async function readRawFileContent(

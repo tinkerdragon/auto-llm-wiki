@@ -23,6 +23,18 @@ test("applies critical shell width inline so modal widens without external CSS",
   expect(modalEl.styles["max-width"]).toBe("1120px");
 });
 
+test("renders a content block for an empty-content update so blanking a file is visible", () => {
+  const modal = new ChangePlanPreviewModal({} as never, {
+    summary: "reset",
+    operations: [{ kind: "update", path: "wiki/index.md", content: "", rationale: "reset index" }]
+  });
+
+  modal.onOpen();
+  const contentEl = modal.contentEl as unknown as { classes: string[] };
+
+  expect(contentEl.classes).toContain("auto-llm-wiki-code-preview");
+});
+
 test("renders a delete operation with its label and path", () => {
   const modal = new ChangePlanPreviewModal({} as never, {
     summary: "Remove orphan",

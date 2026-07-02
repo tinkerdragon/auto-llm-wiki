@@ -94,6 +94,44 @@ test("settings tab saves the auto ingest toggle", async () => {
   expect(saveSettings).toHaveBeenCalledTimes(1);
 });
 
+type TextInput = { value?: string; onchange?: (value: string) => Promise<void> };
+
+function renderTextInputs(): { plugin: LLMWikiPlugin; inputs: TextInput[] } {
+  const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();
+  jest.spyOn(plugin, "saveSettings").mockResolvedValue();
+  const tab = new LLMWikiSettingTab({} as never, plugin);
+  tab.display();
+  const inputs = (tab.containerEl as unknown as { textInputs: TextInput[] }).textInputs;
+  return { plugin, inputs };
+}
+
+test("auto ingest debounce control stores entered seconds as milliseconds", async () => {
+  const { plugin, inputs } = renderTextInputs();
+  const debounce = inputs.find((input) => input.value === "3")!; // 3000ms / 1000 shown as seconds
+  await debounce.onchange!("10");
+  expect(plugin.settings.autoIngestDebounceMs).toBe(10000);
+});
+
+test("auto ingest poll control stores whole seconds and allows zero", async () => {
+  const { plugin, inputs } = renderTextInputs();
+  const poll = inputs.find((input) => input.value === "15")!;
+  await poll.onchange!("30");
+  expect(plugin.settings.autoIngestPollSeconds).toBe(30);
+  await poll.onchange!("0");
+  expect(plugin.settings.autoIngestPollSeconds).toBe(0);
+});
+
+test("request timeout control rejects non-positive input and stores seconds as milliseconds", async () => {
+  const { plugin, inputs } = renderTextInputs();
+  const timeout = inputs.find((input) => input.value === "900")!; // 900000ms / 1000
+  await timeout.onchange!("0");
+  expect(plugin.settings.requestTimeoutMs).toBe(900000); // 0 rejected (allowZero=false)
+  await timeout.onchange!("-5");
+  expect(plugin.settings.requestTimeoutMs).toBe(900000); // negative rejected
+  await timeout.onchange!("30");
+  expect(plugin.settings.requestTimeoutMs).toBe(30000);
+});
+
 test("OpenAI connection test reports success for HTTP 2xx", async () => {
   jest.spyOn(obsidian, "requestUrl").mockResolvedValue({ status: 204, text: "" } as never);
   const plugin = new (LLMWikiPlugin as unknown as { new(): LLMWikiPlugin })();

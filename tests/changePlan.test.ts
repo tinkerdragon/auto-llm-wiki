@@ -18,9 +18,34 @@ test("parses a change plan wrapped in surrounding prose", () => {
   expect(plan.operations).toEqual([]);
 });
 
+test("parses a change plan when the surrounding prose contains braces", () => {
+  const plan = parseChangePlan("Use the {placeholder} syntax.\n{\"summary\":\"ok\",\"operations\":[]}\nThanks {again}");
+  expect(plan.summary).toBe("ok");
+  expect(plan.operations).toEqual([]);
+});
+
+test("parses a change plan whose content contains nested braces", () => {
+  const plan = parseChangePlan("prefix {x} {\"summary\":\"ok\",\"operations\":[{\"kind\":\"create\",\"path\":\"wiki/a.md\",\"content\":\"# H\\n{ nested }\",\"rationale\":\"r\"}]} suffix");
+  expect(plan.operations[0].content).toBe("# H\n{ nested }");
+});
+
 test("parses a fenced change plan with surrounding prose", () => {
   const plan = parseChangePlan("Here you go:\n```json\n{\"summary\":\"ok\",\"operations\":[]}\n```\nDone.");
   expect(plan.summary).toBe("ok");
+});
+
+test("selects the real plan over a preceding example object or restated schema", () => {
+  const real = "{\"summary\":\"real\",\"operations\":[{\"kind\":\"create\",\"path\":\"wiki/a.md\",\"content\":\"x\",\"rationale\":\"r\"}]}";
+  // A model that shows an empty example, or restates the multi-operation schema template, before
+  // emitting its real answer: the last valid top-level object wins (not first, not largest).
+  const example = "{\"summary\":\"example\",\"operations\":[]}";
+  const schemaTemplate = "{\"summary\":\"short human-readable summary\",\"operations\":[{\"kind\":\"create\",\"path\":\"wiki/example.md\",\"content\":\"markdown\",\"rationale\":\"why\"},{\"kind\":\"update\",\"path\":\"wiki/index.md\",\"content\":\"md\",\"rationale\":\"why\"}]}";
+  const afterExample = parseChangePlan(`Example: ${example}\nReal plan:\n${real}`);
+  expect(afterExample.summary).toBe("real");
+  expect(afterExample.operations).toHaveLength(1);
+  const afterSchema = parseChangePlan(`Schema: ${schemaTemplate}\nMy plan:\n${real}`);
+  expect(afterSchema.summary).toBe("real");
+  expect(afterSchema.operations).toHaveLength(1);
 });
 
 test("parses and validates a delete operation without content", () => {
@@ -30,6 +55,13 @@ test("parses and validates a delete operation without content", () => {
   }));
   expect(plan.operations[0]).toEqual({ kind: "delete", path: "wiki/orphan.md", content: "", rationale: "no supporting source" });
   expect(validateChangePlan(plan, DEFAULT_SETTINGS)).toEqual(plan);
+});
+
+test("rejects deleting the configured index or log file", () => {
+  const indexPlan = parseChangePlan(JSON.stringify({ summary: "x", operations: [{ kind: "delete", path: "wiki/index.md", rationale: "r" }] }));
+  expect(() => validateChangePlan(indexPlan, DEFAULT_SETTINGS)).toThrow("Cannot delete the index or log file");
+  const logPlan = parseChangePlan(JSON.stringify({ summary: "x", operations: [{ kind: "delete", path: "wiki/log.md", rationale: "r" }] }));
+  expect(() => validateChangePlan(logPlan, DEFAULT_SETTINGS)).toThrow("Cannot delete the index or log file");
 });
 
 test("rejects deleting outside the wiki folder", () => {

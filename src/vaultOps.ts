@@ -67,11 +67,27 @@ export async function applyChangePlan(app: App, plan: ChangePlan): Promise<void>
 // Reject the whole plan before any write when an operation is bound to fail, so a plan
 // is never applied halfway.
 function preValidatePlan(app: App, plan: ChangePlan): void {
-  for (const operation of plan.operations) {
-    const path = ensureMarkdownPath(operation.path);
+  // Normalize each path once, then classify into delete vs write targets.
+  const entries = plan.operations.map((operation) => ({ operation, path: ensureMarkdownPath(operation.path) }));
+  const deletePaths = new Set<string>();
+  const writePaths = new Set<string>();
+  for (const { operation, path } of entries) {
+    (operation.kind === "delete" ? deletePaths : writePaths).add(path);
+  }
+  for (const { operation, path } of entries) {
+    // A path can't be both deleted and written in one plan: the intended order is ambiguous
+    // and only half of the self-cancelling plan would apply.
+    if (deletePaths.has(path) && writePaths.has(path)) {
+      throw new Error(t("error.conflictingOperations", { path }));
+    }
     const existing = app.vault.getAbstractFileByPath(path);
     if (operation.kind === "create") {
       if (existing) throw new Error(t("error.fileAlreadyExists", { path }));
+    } else if (operation.kind === "delete") {
+      // Reject deleting a path that isn't a current file (missing or a folder) so a
+      // hallucinated or stale path surfaces instead of silently no-opping.
+      if (!existing) throw new Error(t("error.cannotDeleteMissingFile", { path }));
+      if (!(existing instanceof TFile)) throw new Error(t("error.pathIsFolder", { path }));
     } else if (existing && !(existing instanceof TFile)) {
       throw new Error(t("error.pathIsFolder", { path }));
     }
