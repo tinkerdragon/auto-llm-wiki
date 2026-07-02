@@ -5,7 +5,9 @@ type LocalStorageLike = {
 };
 
 function ensureWindowLocalStorage(): LocalStorageLike {
-  const globalWindow = globalThis as { window?: { localStorage?: LocalStorageLike } };
+  const globalWindow = globalThis as {
+    window?: { localStorage?: LocalStorageLike; setInterval?: unknown; clearInterval?: unknown };
+  };
   if (!globalWindow.window) globalWindow.window = {};
   if (!globalWindow.window.localStorage) {
     const store: Record<string, string> = {};
@@ -15,6 +17,10 @@ function ensureWindowLocalStorage(): LocalStorageLike {
       removeItem: (key) => { delete store[key]; }
     };
   }
+  // No-op timer stubs: return a fake id and never actually schedule, so polling intervals
+  // registered during tests do not leak real timers or keep the process alive.
+  if (!globalWindow.window.setInterval) globalWindow.window.setInterval = () => 0;
+  if (!globalWindow.window.clearInterval) globalWindow.window.clearInterval = () => undefined;
   return globalWindow.window.localStorage;
 }
 
@@ -139,6 +145,11 @@ export class Plugin {
   addSettingTab(): void {}
   registerEvent(eventRef: unknown): void {
     this.registeredEvents.push(eventRef);
+  }
+  registeredIntervals: unknown[] = [];
+  registerInterval(id: number): number {
+    this.registeredIntervals.push(id);
+    return id;
   }
   addStatusBarItem(): { text: string; setText(text: string): void } {
     const item = {

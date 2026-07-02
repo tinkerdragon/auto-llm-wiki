@@ -19,6 +19,7 @@ export default class LLMWikiPlugin extends Plugin {
   private autoIngestEventRefs: EventRef[] = [];
   private autoIngestRunning = false;
   private autoIngestPending = false;
+  private autoIngestPollTimer?: number;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -71,6 +72,20 @@ export default class LLMWikiPlugin extends Plugin {
     this.autoIngestEventRefs = [createRef, modifyRef];
     this.registerEvent(createRef);
     this.registerEvent(modifyRef);
+    this.startAutoIngestPolling();
+  }
+
+  // Vault file events do not fire for raw files changed outside Obsidian (e.g. dragged in,
+  // synced, or on filesystems whose change notifications Obsidian misses). Poll on an interval
+  // so those changes are picked up without a restart. Scans are cheap when nothing changed.
+  private startAutoIngestPolling(): void {
+    if (this.autoIngestPollTimer !== undefined) return;
+    const seconds = this.settings.autoIngestPollSeconds;
+    if (!seconds || seconds <= 0) return;
+    this.autoIngestPollTimer = window.setInterval(() => {
+      void this.runAutoIngest(true);
+    }, seconds * 1000);
+    this.registerInterval(this.autoIngestPollTimer);
   }
 
   private registerAutoIngestListeners(): void {
@@ -87,41 +102,41 @@ export default class LLMWikiPlugin extends Plugin {
     }, this.settings.autoIngestDebounceMs);
   }
 
-  private async runAutoIngest(): Promise<void> {
+  private async runAutoIngest(quiet = false): Promise<void> {
     if (this.autoIngestRunning) {
       this.autoIngestPending = true;
       return;
     }
     this.autoIngestRunning = true;
     try {
-      await this.ingestActiveSource(true);
+      await this.ingestActiveSource(true, quiet);
     } finally {
       this.autoIngestRunning = false;
       if (this.autoIngestPending) {
         this.autoIngestPending = false;
-        await this.runAutoIngest();
+        await this.runAutoIngest(quiet);
       }
     }
   }
 
-  private async ingestActiveSource(autoApply = false): Promise<void> {
+  private async ingestActiveSource(autoApply = false, quiet = false): Promise<void> {
     if (!this.settings.openAIApiKey) {
-      new Notice(t("notice.missingOpenAIKey"));
+      if (!quiet) new Notice(t("notice.missingOpenAIKey"));
       return;
     }
 
     try {
       const scanningMessage = t("status.scanningRaw");
       this.setStatus(scanningMessage);
-      new Notice(scanningMessage);
+      if (!quiet) new Notice(scanningMessage);
       const candidates = findRawFileCandidates(this.app.vault.getFiles(), this.settings);
       const candidateMessage = this.formatRawCandidateMessage(candidates.sourceFiles.length, candidates.pdfPaths);
       this.setStatus(candidateMessage);
-      new Notice(candidateMessage);
+      if (!quiet) new Notice(candidateMessage);
       const scan = await findChangedRawFiles(this.app, this.settings, this.rawFileState, (path) => {
         const message = t("status.extractingPdf", { path });
         this.setStatus(message);
-        new Notice(message);
+        if (!quiet) new Notice(message);
       }, (request) => this.ocrPdfPage(request), (request) => this.ocrImage(request));
       // Persist refreshed mtime/size for confirmed-unchanged files immediately (cache
       // maintenance, independent of ingest) so the fast-path engages on later scans.
@@ -132,13 +147,13 @@ export default class LLMWikiPlugin extends Plugin {
       const changedRawFiles = scan.changed;
       if (changedRawFiles.length === 0) {
         this.setStatus(t("status.noRawChanges"));
-        new Notice(t("notice.noRawChanges"));
+        if (!quiet) new Notice(t("notice.noRawChanges"));
         return;
       }
 
       const readingMessage = t("status.readingVaultContext");
       this.setStatus(readingMessage);
-      new Notice(readingMessage);
+      if (!quiet) new Notice(readingMessage);
       const prompt = buildIngestPrompt({
         index: await readTextFile(this.app, this.settings.indexPath),
         log: await readTextFile(this.app, this.settings.logPath),

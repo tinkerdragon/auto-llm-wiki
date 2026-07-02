@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
   openAIModel: "gpt-4.1-mini",
   autoIngestEnabled: false,
   autoIngestDebounceMs: 3000,
+  autoIngestPollSeconds: 15,
   requestTimeoutMs: 900000
 };
 
@@ -41,8 +42,24 @@ export class LLMWikiSettingTab extends PluginSettingTab {
     this.addTextSetting(t("settings.openAIApiKey.name"), t("settings.openAIApiKey.desc"), "openAIApiKey", true);
     this.addTextSetting(t("settings.openAIModel.name"), t("settings.openAIModel.desc"), "openAIModel");
     this.addToggleSetting(t("settings.autoIngestEnabled.name"), t("settings.autoIngestEnabled.desc"), "autoIngestEnabled");
+    this.addPollIntervalSetting();
     this.addTimeoutSetting();
     this.addOpenAIConnectionTest();
+  }
+
+  private addPollIntervalSetting(): void {
+    new Setting(this.containerEl)
+      .setName(t("settings.autoIngestPoll.name"))
+      .setDesc(t("settings.autoIngestPoll.desc"))
+      .addText((text) => {
+        text.setValue(String(this.plugin.settings.autoIngestPollSeconds));
+        text.onChange(async (value) => {
+          const seconds = Number(value.trim());
+          if (!Number.isFinite(seconds) || seconds < 0) return;
+          this.plugin.settings = { ...this.plugin.settings, autoIngestPollSeconds: Math.round(seconds) };
+          await this.plugin.saveSettings();
+        });
+      });
   }
 
   private addTimeoutSetting(): void {

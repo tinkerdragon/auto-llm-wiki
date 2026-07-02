@@ -98,6 +98,7 @@ Open the plugin settings and configure:
 - **OpenAI API key**: API key for your OpenAI-compatible provider.
 - **OpenAI model**: model name to use.
 - **Auto ingest raw file changes**: disabled by default. When enabled, supported raw file changes are analyzed automatically after a short debounce and validated model changes are applied without opening the review modal.
+- **Auto ingest poll interval (seconds)**: when auto ingest is on, how often to scan the raw folder for changes made outside Obsidian (e.g. dragged-in files, which do not fire file events). Defaults to 15; set 0 to disable polling.
 - **Request timeout (seconds)**: how long to wait for a model response before timing out. Defaults to 900 seconds; raise it for slow local or reasoning models, lower it for fast hosted models.
 
 Third-party OpenAI-compatible providers can be used as long as the URL points directly to their `/v1/chat/completions` endpoint. Use **Test OpenAI connection** in settings to check whether the configured endpoint returns HTTP 2xx for the current URL, key, and model.
@@ -115,7 +116,7 @@ Third-party OpenAI-compatible providers can be used as long as the URL points di
 
 The command scans the configured raw folder and processes all new or changed supported raw files. Text/code-like files are read directly, HTML is converted to readable text, Office documents, spreadsheets, presentations, and RTF files are extracted locally, and text-layer PDFs are extracted directly. Scanned or image-only PDF pages and image-only PPTX slides use vision OCR, and supported image files are sent to the configured OpenAI-compatible model for OCR before the extracted text is ingested. Files that have already been successfully applied are skipped until their content changes.
 
-When **Auto ingest raw file changes** is enabled, the plugin watches the configured raw folder for supported file creations and modifications. After a short debounce, it runs the same ingest pipeline and automatically applies validated changes without opening the review modal. Auto ingest is disabled by default.
+When **Auto ingest raw file changes** is enabled, the plugin watches the configured raw folder for supported file creations and modifications. After a short debounce, it runs the same ingest pipeline and automatically applies validated changes without opening the review modal. It also polls the raw folder on the configured interval to catch files changed outside Obsidian (which do not fire file events). Auto ingest is disabled by default.
 
 The command flow is:
 

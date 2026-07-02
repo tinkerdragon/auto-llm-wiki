@@ -24,6 +24,7 @@ export interface LLMWikiSettings {
   openAIModel: string;
   autoIngestEnabled: boolean;
   autoIngestDebounceMs: number;
+  autoIngestPollSeconds: number;
   requestTimeoutMs: number;
 }
 
