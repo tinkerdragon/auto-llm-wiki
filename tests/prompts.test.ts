@@ -43,6 +43,18 @@ test("lint prompt asks for contradictions and orphan pages", () => {
   expect(prompt).toContain("orphan");
 });
 
+test("lint prompt separates wiki pages with a blank line", () => {
+  const prompt = buildLintPrompt({
+    index: "# Index",
+    log: "# Log",
+    wikiPages: [
+      { path: "wiki/a.md", content: "A" },
+      { path: "wiki/b.md", content: "B" }
+    ]
+  });
+  expect(prompt).toContain("A\n\n---");
+});
+
 test("query selection prompt lists page paths and asks for a JSON array", () => {
   const prompt = buildQuerySelectionPrompt({
     index: "# Index",

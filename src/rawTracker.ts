@@ -67,23 +67,27 @@ export interface RawFileCandidates<T extends RawCandidateFile = RawCandidateFile
   pdfPaths: string[];
 }
 
-export function hashContent(content: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < content.length; index++) {
-    hash ^= content.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+// 64-bit digest from two independent 32-bit hashes (FNV-1a + djb2), concatenated as 16 hex
+// chars. Wider than a single 32-bit hash so a content change cannot silently collide with the
+// recorded hash and be skipped. Avoids BigInt to stay within the ES2018 build target.
+function hash64(length: number, byteAt: (index: number) => number): string {
+  let fnv = 2166136261;
+  let djb = 5381;
+  for (let index = 0; index < length; index++) {
+    const value = byteAt(index);
+    fnv = Math.imul(fnv ^ value, 16777619);
+    djb = (Math.imul(djb, 33) + value) >>> 0;
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return (fnv >>> 0).toString(16).padStart(8, "0") + (djb >>> 0).toString(16).padStart(8, "0");
+}
+
+export function hashContent(content: string): string {
+  return hash64(content.length, (index) => content.charCodeAt(index));
 }
 
 export function hashBinaryContent(buffer: ArrayBuffer): string {
-  let hash = 2166136261;
   const bytes = new Uint8Array(buffer);
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return hash64(bytes.length, (index) => bytes[index]);
 }
 
 const OPEN_XML_IGNORED_PREFIXES = ["docProps/"];

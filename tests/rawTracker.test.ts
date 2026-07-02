@@ -21,6 +21,12 @@ test("hashContent changes when file content changes", () => {
   expect(hashContent("alpha")).not.toBe(hashContent("beta"));
 });
 
+test("hashContent and hashBinaryContent produce a 64-bit (16 hex char) digest", () => {
+  expect(hashContent("alpha")).toHaveLength(16);
+  expect(hashBinaryContent(Uint8Array.from([1, 2, 3]).buffer)).toHaveLength(16);
+  expect(hashBinaryContent(Uint8Array.from([1, 2, 3]).buffer)).not.toBe(hashBinaryContent(Uint8Array.from([1, 2, 4]).buffer));
+});
+
 test("findRawFileCandidates reports raw text, code, PDF, image, HTML, and Office candidates", () => {
   const files = [
     { path: "raw/20260509.Skill.md" },

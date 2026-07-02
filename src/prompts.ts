@@ -114,7 +114,7 @@ ${formatWikiPages(context.wikiPages ?? [])}`;
 function formatWikiPages(pages: Array<{ path: string; content: string }>): string {
   return pages.map((page) => `---
 Path: ${page.path}
-${page.content}`).join("\n");
+${page.content}`).join("\n\n");
 }
 
 function formatSources(context: WikiContext): string {
