@@ -13,10 +13,11 @@ function buildJsonContract(settings: LLMWikiSettings): string {
   "operations": [
     { "kind": "create", "path": "${settings.wikiFolder}/example.md", "content": "markdown", "rationale": "why this file changes" },
     { "kind": "update", "path": "${settings.indexPath}", "content": "full replacement markdown", "rationale": "why this file changes" },
-    { "kind": "prepend", "path": "${settings.logPath}", "content": "newest-first markdown log entry", "rationale": "why this file changes" }
+    { "kind": "prepend", "path": "${settings.logPath}", "content": "newest-first markdown log entry", "rationale": "why this file changes" },
+    { "kind": "delete", "path": "${settings.wikiFolder}/obsolete.md", "rationale": "why this page is removed" }
   ]
 }
-Use only create, update, append, or prepend. Write only inside ${settings.wikiFolder}/. Use ${settings.indexPath} for the content index and ${settings.logPath} for the newest-first chronological log. Use prepend for new entries in ${settings.logPath}. Treat ${settings.rawFolder}/ and ${settings.assetsFolder}/ as read-only.`;
+Use only create, update, append, prepend, or delete. delete removes a page inside ${settings.wikiFolder}/ and takes no content — use it only for orphaned or fully superseded pages. Write only inside ${settings.wikiFolder}/. Use ${settings.indexPath} for the content index and ${settings.logPath} for the newest-first chronological log. Use prepend for new entries in ${settings.logPath}. Treat ${settings.rawFolder}/ and ${settings.assetsFolder}/ as read-only.`;
 }
 
 export function buildIngestPrompt(context: WikiContext, settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
@@ -98,7 +99,7 @@ function extractJsonArray(text: string): unknown {
 }
 
 export function buildLintPrompt(context: WikiContext, settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
-  return `You lint a persistent LLM Wiki. Look for contradictions, stale claims, orphan pages, missing cross-references, important concepts without pages, and data gaps. Save the report as a wiki markdown page if useful.
+  return `You lint a persistent LLM Wiki. Look for contradictions, stale claims, orphan pages, missing cross-references, important concepts without pages, and data gaps. Remove orphan pages that no longer have any supporting source with a delete operation. Save the report as a wiki markdown page if useful.
 
 ${outputLanguageInstruction()}
 

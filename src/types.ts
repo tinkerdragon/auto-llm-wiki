@@ -25,7 +25,7 @@ export interface LLMWikiSettings {
   requestTimeoutMs: number;
 }
 
-export type FileOperationKind = "create" | "update" | "append" | "prepend";
+export type FileOperationKind = "create" | "update" | "append" | "prepend" | "delete";
 
 export interface FileOperation {
   kind: FileOperationKind;

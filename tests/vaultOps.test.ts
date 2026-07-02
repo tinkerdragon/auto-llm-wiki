@@ -101,6 +101,59 @@ test("readWikiPages reads only the requested existing pages", async () => {
   expect(readPaths).toEqual(["wiki/a.md"]);
 });
 
+test("deletes an existing wiki file for a delete operation", async () => {
+  const TFileMock = obsidian.TFile as unknown as { new(path: string): obsidian.TFile };
+  const store = new Map<string, string>([["wiki/orphan.md", "old"]]);
+  const deleted: string[] = [];
+  const app = {
+    vault: {
+      getAbstractFileByPath: (path: string) => (store.has(path) ? new TFileMock(path) : null),
+      read: async (file: { path: string }) => store.get(file.path) ?? "",
+      create: jest.fn(),
+      modify: jest.fn(),
+      delete: async (file: { path: string }) => { deleted.push(file.path); store.delete(file.path); },
+      createFolder: async () => undefined
+    }
+  };
+
+  await applyChangePlan(app as never, {
+    summary: "remove orphan",
+    operations: [{ kind: "delete", path: "wiki/orphan.md", content: "", rationale: "orphan" }]
+  });
+
+  expect(deleted).toEqual(["wiki/orphan.md"]);
+  expect(store.has("wiki/orphan.md")).toBe(false);
+  expect(app.vault.modify).not.toHaveBeenCalled();
+});
+
+test("restores a deleted file when a later operation fails", async () => {
+  const TFileMock = obsidian.TFile as unknown as { new(path: string): obsidian.TFile };
+  const store = new Map<string, string>([["wiki/orphan.md", "keep-me"]]);
+  const app = {
+    vault: {
+      getAbstractFileByPath: (path: string) => (store.has(path) ? new TFileMock(path) : null),
+      read: async (file: { path: string }) => store.get(file.path) ?? "",
+      create: async (path: string, content: string) => {
+        if (path === "wiki/new.md") throw new Error("disk fail");
+        store.set(path, content);
+      },
+      modify: async (file: { path: string }, content: string) => { store.set(file.path, content); },
+      delete: async (file: { path: string }) => { store.delete(file.path); },
+      createFolder: async () => undefined
+    }
+  };
+
+  await expect(applyChangePlan(app as never, {
+    summary: "x",
+    operations: [
+      { kind: "delete", path: "wiki/orphan.md", content: "", rationale: "r" },
+      { kind: "create", path: "wiki/new.md", content: "x", rationale: "r" }
+    ]
+  })).rejects.toThrow("disk fail");
+
+  expect(store.get("wiki/orphan.md")).toBe("keep-me");
+});
+
 test("pre-validates the plan and writes nothing when a create targets an existing file", async () => {
   const TFileMock = obsidian.TFile as unknown as { new(path: string): obsidian.TFile };
   const store = new Map<string, string>([["wiki/exists.md", "e"]]);

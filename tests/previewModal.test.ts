@@ -23,6 +23,18 @@ test("applies critical shell width inline so modal widens without external CSS",
   expect(modalEl.styles["max-width"]).toBe("1120px");
 });
 
+test("renders a delete operation with its label and path", () => {
+  const modal = new ChangePlanPreviewModal({} as never, {
+    summary: "Remove orphan",
+    operations: [{ kind: "delete", path: "wiki/orphan.md", content: "", rationale: "no supporting source" }]
+  });
+
+  modal.onOpen();
+  const contentEl = modal.contentEl as unknown as { texts: string[] };
+
+  expect(contentEl.texts).toEqual(expect.arrayContaining(["DELETE", "wiki/orphan.md", "no supporting source", "1 delete"]));
+});
+
 test("renders a polished card-based review layout", () => {
   const modal = new ChangePlanPreviewModal({} as never, {
     summary: "Integrate source notes",

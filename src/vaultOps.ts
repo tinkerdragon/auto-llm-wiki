@@ -101,8 +101,9 @@ async function snapshotAffectedFiles(app: App, plan: ChangePlan): Promise<FileSn
   return snapshots;
 }
 
-// Best-effort restore to the pre-apply state: delete files that were newly created and
-// restore the original content of files that were modified. Keep going if one restore fails.
+// Best-effort restore to the pre-apply state: delete files that were newly created, recreate
+// files that were deleted, and restore the original content of files that were modified. Keep
+// going if one restore fails.
 async function rollback(app: App, snapshots: FileSnapshot[]): Promise<void> {
   for (const snapshot of snapshots) {
     try {
@@ -110,6 +111,9 @@ async function rollback(app: App, snapshots: FileSnapshot[]): Promise<void> {
       if (snapshot.existed) {
         if (existing instanceof TFile && snapshot.content !== null) {
           await app.vault.modify(existing, snapshot.content);
+        } else if (!existing && snapshot.content !== null) {
+          await ensureParentFolders(app, snapshot.path);
+          await app.vault.create(snapshot.path, snapshot.content);
         }
       } else if (existing instanceof TFile) {
         await app.vault.delete(existing);
@@ -122,6 +126,11 @@ async function rollback(app: App, snapshots: FileSnapshot[]): Promise<void> {
 
 async function applyOperation(app: App, operation: FileOperation): Promise<void> {
   const path = ensureMarkdownPath(operation.path);
+  if (operation.kind === "delete") {
+    const target = app.vault.getAbstractFileByPath(path);
+    if (target instanceof TFile) await app.vault.delete(target);
+    return;
+  }
   await ensureParentFolders(app, path);
   const existing = app.vault.getAbstractFileByPath(path);
   if (operation.kind === "create") {

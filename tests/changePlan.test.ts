@@ -23,6 +23,23 @@ test("parses a fenced change plan with surrounding prose", () => {
   expect(plan.summary).toBe("ok");
 });
 
+test("parses and validates a delete operation without content", () => {
+  const plan = parseChangePlan(JSON.stringify({
+    summary: "remove orphan",
+    operations: [{ kind: "delete", path: "wiki/orphan.md", rationale: "no supporting source" }]
+  }));
+  expect(plan.operations[0]).toEqual({ kind: "delete", path: "wiki/orphan.md", content: "", rationale: "no supporting source" });
+  expect(validateChangePlan(plan, DEFAULT_SETTINGS)).toEqual(plan);
+});
+
+test("rejects deleting outside the wiki folder", () => {
+  const plan = parseChangePlan(JSON.stringify({
+    summary: "bad",
+    operations: [{ kind: "delete", path: "raw/source.md", rationale: "bad" }]
+  }));
+  expect(() => validateChangePlan(plan, DEFAULT_SETTINGS)).toThrow("outside wiki folder");
+});
+
 test("rejects null change plans with localized shape error", () => {
   expect(() => parseChangePlan("null")).toThrow("Invalid change plan shape");
 });

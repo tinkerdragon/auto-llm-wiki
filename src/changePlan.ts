@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 import { ChangePlan, FileOperation, LLMWikiSettings } from "./types";
 
-const ALLOWED_KINDS = new Set(["create", "update", "append", "prepend"]);
+const ALLOWED_KINDS = new Set(["create", "update", "append", "prepend", "delete"]);
 
 export function parseChangePlan(text: string): ChangePlan {
   const parsed = extractJsonObject(text);
@@ -69,13 +69,15 @@ function assertOperationShape(operation: unknown): FileOperation {
   if (!isRecord(operation) || typeof operation.kind !== "string" || !ALLOWED_KINDS.has(operation.kind)) {
     throw new Error(t("error.invalidOperationKind"));
   }
+  const kind = operation.kind as FileOperation["kind"];
   if (typeof operation.path !== "string") throw new Error(t("error.invalidOperationPath"));
-  if (typeof operation.content !== "string") throw new Error(t("error.invalidOperationContent"));
+  // delete has nothing to write, so its content is optional (defaults to empty).
+  if (kind !== "delete" && typeof operation.content !== "string") throw new Error(t("error.invalidOperationContent"));
   if (typeof operation.rationale !== "string") throw new Error(t("error.invalidOperationRationale"));
   return {
-    kind: operation.kind as FileOperation["kind"],
+    kind,
     path: operation.path,
-    content: operation.content,
+    content: typeof operation.content === "string" ? operation.content : "",
     rationale: operation.rationale
   };
 }

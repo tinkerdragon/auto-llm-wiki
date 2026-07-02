@@ -149,13 +149,14 @@ Run:
 Lint Auto LLM Wiki
 ```
 
-The plugin asks the model to look for stale claims, contradictions, orphan pages, missing cross-references, and data gaps.
+The plugin asks the model to look for stale claims, contradictions, orphan pages, missing cross-references, and data gaps, and to remove orphan pages that no longer have any supporting source. Deletions are proposed in the change plan and applied only after you review them (following Karpathy's model: sources are immutable, and the wiki is pruned during lint rather than automatically when a source is deleted).
 
 ## Safety model
 
 - Raw files are never modified by generated change plans.
 - Assets are treated as read-only.
 - Writes outside the configured wiki folder are rejected.
+- Deletions are limited to the wiki folder, previewed like any other change, and rolled back if applying fails.
 - `indexPath` and `logPath` must stay inside the configured wiki folder.
 - Proposed file changes must be reviewed before applying.
 - Raw file state is updated only after Apply succeeds.

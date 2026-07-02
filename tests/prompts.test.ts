@@ -55,6 +55,16 @@ test("lint prompt asks for contradictions and orphan pages", () => {
   expect(prompt).toContain("orphan");
 });
 
+test("json contract lists the delete operation", () => {
+  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [] });
+  expect(prompt).toContain("delete");
+});
+
+test("lint prompt allows removing orphan pages with no supporting source", () => {
+  const prompt = buildLintPrompt({ index: "# Index", log: "# Log", wikiPages: [] });
+  expect(prompt).toContain("Remove orphan pages that no longer have any supporting source");
+});
+
 test("lint prompt separates wiki pages with a blank line", () => {
   const prompt = buildLintPrompt({
     index: "# Index",
