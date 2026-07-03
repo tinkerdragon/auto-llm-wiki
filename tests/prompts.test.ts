@@ -1,4 +1,4 @@
-import { buildIngestPrompt, buildLintPrompt, buildQueryPrompt, buildQuerySelectionPrompt, parseSelectedQueryPages } from "../src/prompts";
+import { buildChatContextMessage, buildChatSystemPrompt, buildIngestPrompt, buildLintPrompt, buildQueryPrompt, buildQuerySelectionPrompt, parseSelectedQueryPages } from "../src/prompts";
 import { DEFAULT_SETTINGS } from "../src/settings";
 import { __setLanguage } from "./obsidianMock";
 
@@ -118,6 +118,43 @@ test("lint prompt separates wiki pages with a blank line", () => {
     ]
   });
   expect(prompt).toContain("A\n\n---");
+});
+
+test("chat system prompt asks for cited, non-JSON answers grounded in the wiki", () => {
+  const prompt = buildChatSystemPrompt();
+  expect(prompt).toContain("Cite the wiki pages");
+  expect(prompt).toContain("never JSON");
+  expect(prompt).not.toContain("Return only JSON");
+});
+
+test("chat system prompt localizes the output-language instruction", () => {
+  __setLanguage("zh");
+  const prompt = buildChatSystemPrompt();
+  expect(prompt).toContain("Write user-visible natural-language output in Simplified Chinese.");
+});
+
+test("chat context message includes the index and pages but not the log", () => {
+  const message = buildChatContextMessage({
+    index: "# Index",
+    wikiPages: [{ path: "wiki/a.md", content: "alpha body" }]
+  });
+  expect(message).toContain("# Index");
+  expect(message).toContain("wiki/a.md");
+  expect(message).toContain("alpha body");
+  expect(message).not.toContain("Current log:");
+});
+
+test("query prompt files a supplied answer verbatim while keeping the JSON contract", () => {
+  const prompt = buildQueryPrompt({
+    index: "# Index",
+    log: "# Log",
+    question: "What is X?",
+    answer: "X is the answer, see wiki/x.md",
+    wikiPages: []
+  });
+  expect(prompt).toContain("Answer to file:");
+  expect(prompt).toContain("X is the answer, see wiki/x.md");
+  expect(prompt).toContain("Return only JSON");
 });
 
 test("query selection prompt lists page paths and asks for a JSON array", () => {

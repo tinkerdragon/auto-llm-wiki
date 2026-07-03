@@ -48,14 +48,20 @@ ${formatSources(context)}`;
 }
 
 export function buildQueryPrompt(context: WikiContext, settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
-  return `You answer questions using the persistent LLM Wiki. Synthesize an answer from the index and the relevant pages, with citations. If the answer is worth keeping — a comparison, analysis, or connection — file it back as a new or updated wiki page so explorations compound in the knowledge base. Also prepend a newest-first entry to the log to record this query.
+  // When an answer is supplied (e.g. "Save to wiki" from the chat), persist THAT answer rather
+  // than re-deriving one, so the saved page matches what the user actually saw.
+  const intro = context.answer !== undefined
+    ? "You are filing a completed question-and-answer back into the persistent LLM Wiki. Persist the answer below as a new or updated wiki page (with citations) so explorations compound, and prepend a newest-first entry to the log to record this query."
+    : "You answer questions using the persistent LLM Wiki. Synthesize an answer from the index and the relevant pages, with citations. If the answer is worth keeping — a comparison, analysis, or connection — file it back as a new or updated wiki page so explorations compound in the knowledge base. Also prepend a newest-first entry to the log to record this query.";
+  const answerSection = context.answer !== undefined ? `\nAnswer to file:\n${context.answer}\n` : "";
+  return `${intro}
 
 ${outputLanguageInstruction()}
 
 ${buildJsonContract(settings)}
 
 Question: ${context.question}
-
+${answerSection}
 Current index:
 ${context.index}
 
@@ -64,6 +70,26 @@ ${context.log}
 
 Relevant wiki pages:
 ${formatWikiPages(context.wikiPages ?? [])}`;
+}
+
+export function buildChatSystemPrompt(settings: LLMWikiSettings = DEFAULT_SETTINGS): string {
+  return `You are a helpful assistant answering questions from a user's persistent LLM Wiki. Answer only from the wiki context provided in the conversation (the index and the relevant pages). Cite the wiki pages you use by their path, e.g. ${settings.wikiFolder}/example.md. If the wiki does not cover the question, say so plainly instead of guessing. Be concise and conversational. Reply in plain text or Markdown — never JSON.
+
+${outputLanguageInstruction()}`;
+}
+
+export function buildChatContextMessage(
+  context: { index: string; wikiPages: Array<{ path: string; content: string }> },
+  settings: LLMWikiSettings = DEFAULT_SETTINGS
+): string {
+  // The log records ingest/query operations, not knowledge, so it is deliberately omitted here.
+  return `Wiki context for answering the question. Treat the ${settings.wikiFolder}/ pages below as your only knowledge source.
+
+Current index:
+${context.index}
+
+Relevant wiki pages:
+${formatWikiPages(context.wikiPages)}`;
 }
 
 export function buildQuerySelectionPrompt(

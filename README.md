@@ -14,7 +14,8 @@ Auto LLM Wiki is an Obsidian plugin for maintaining a Karpathy-style LLM Wiki. I
 - Retry transient endpoint errors (network, 429, 5xx) with backoff, honor `Retry-After`, and time out slow requests with a configurable limit.
 - Test the configured OpenAI-compatible endpoint from the settings page.
 - Generate a structured JSON change plan for wiki updates.
-- Answer questions with index-first retrieval (read the index, then drill into relevant pages) and file worthwhile answers back into the wiki.
+- Chat with your wiki in a dedicated side panel: multi-turn conversations grounded in your notes via index-first retrieval, with Markdown-rendered replies you can copy or file back into the wiki.
+- Keep multiple conversations that coexist and persist across restarts — switch, rename, and delete them from a history list, and start or use another chat while one is still replying.
 - Preview proposed changes before writing anything to your vault.
 - Apply changes only after user confirmation.
 - Apply change plans atomically: validate the whole plan first and roll back on failure so the vault is never left half-written.
@@ -32,7 +33,7 @@ raw/             # immutable source notes
 raw/assets/      # source attachments
 wiki/            # LLM-maintained wiki pages
 wiki/index.md    # content index
-wiki/log.md      # newest-first ingest/query/lint log
+wiki/log.md      # newest-first ingest/chat/lint log
 ```
 
 All paths are configurable in the plugin settings.
@@ -131,15 +132,22 @@ The command flow is:
 6. Apply changes only after confirmation.
 7. Record raw file hashes only after changes are successfully applied.
 
-### Query the wiki
+### Chat with the wiki
 
-Run:
+Open the chat panel from the ribbon (the chat icon) or run:
 
 ```text
 Query Auto LLM Wiki
 ```
 
-The plugin reads the index first; for larger wikis it asks the model which pages are relevant and drills into only those (index-first retrieval), then asks the model to return a saveable change plan. A worthwhile answer is filed back into the wiki as a page and the query is recorded in the log, so explorations compound over time. You can review and apply the proposed result.
+This opens a chat panel docked in the right sidebar. Ask questions in natural language and the plugin answers from your wiki: it reads the index first and, for larger wikis, asks the model which pages are relevant and drills into only those (index-first retrieval). Replies are rendered as Markdown; you can **Copy** a reply or **Save to wiki** to file a worthwhile answer back as a page through the reviewed change-plan flow (the exchange is also recorded in the log), so explorations compound over time.
+
+The panel keeps multiple conversations:
+
+- **New chat** starts a fresh conversation without discarding the current one.
+- The history list (the toggle in the panel header) lets you switch between conversations, **rename** them, or **delete** them (with a confirmation prompt).
+- Conversations are saved with the plugin and persist across Obsidian restarts.
+- Waiting is per-conversation: you can start or use another chat while one is still awaiting a reply, and each reply lands back in its own conversation.
 
 ### Lint the wiki
 
@@ -163,7 +171,7 @@ The plugin asks the model to reconcile the wiki with the current raw sources and
 
 ## Privacy and network use
 
-This plugin sends selected vault content to the OpenAI-compatible chat completions endpoint configured in the plugin settings. During ingest, it sends new or changed raw text extracted from supported source files, including Markdown, text/code, HTML, PDFs, Office documents, spreadsheets, presentations, and RTF files; when OCR is needed, it sends rendered PDF page images, embedded PPTX slide images, or supported image files to the configured model. Wiki index/log context is included. During query and lint commands, it sends relevant wiki context. The **Test OpenAI connection** button sends a small ping-style chat completions request to the configured endpoint. No network request is made until you configure an API URL and API key and run a command or click the test button.
+This plugin sends selected vault content to the OpenAI-compatible chat completions endpoint configured in the plugin settings. During ingest, it sends new or changed raw text extracted from supported source files, including Markdown, text/code, HTML, PDFs, Office documents, spreadsheets, presentations, and RTF files; when OCR is needed, it sends rendered PDF page images, embedded PPTX slide images, or supported image files to the configured model. Wiki index/log context is included. When you chat, it sends the wiki index plus the pages selected for each turn along with the recent conversation messages; saving a chat answer and the lint command also send relevant wiki context. The **Test OpenAI connection** button sends a small ping-style chat completions request to the configured endpoint. No network request is made until you configure an API URL and API key and run a command or click the test button.
 
 The API key is stored locally in Obsidian plugin data and is sent as an Authorization header only to the configured API URL. If you configure a third-party OpenAI-compatible endpoint, your API key and selected vault content are sent to that provider.
 

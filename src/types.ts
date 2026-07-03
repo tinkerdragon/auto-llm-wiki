@@ -46,6 +46,8 @@ export interface WikiContext {
   sourceContent?: string;
   sources?: Array<{ path: string; content: string }>;
   question?: string;
+  /** A finished answer to persist verbatim (Save-to-wiki), instead of re-deriving one. */
+  answer?: string;
   wikiPages?: Array<{ path: string; content: string }>;
   /** Paths of raw sources that still exist, so lint can detect orphaned wiki pages. */
   rawPaths?: string[];

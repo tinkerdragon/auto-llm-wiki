@@ -19,8 +19,21 @@ export interface ConnectionTestRequest {
   model: string;
 }
 
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatRequest {
+  apiKey: string;
+  apiUrl?: string;
+  model: string;
+  messages: ChatMessage[];
+}
+
 export interface LLMProvider {
   complete(request: CompleteRequest): Promise<string>;
   completeVision(request: VisionCompleteRequest): Promise<string>;
+  chat(request: ChatRequest): Promise<string>;
   testConnection(request: ConnectionTestRequest): Promise<void>;
 }

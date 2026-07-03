@@ -60,7 +60,13 @@ export class Modal {
       this.onOpen();
     }
   }
-  close(): void {}
+  close(): void {
+    // Real Obsidian invokes onClose() from close(); mirror it so re-entrancy (submit -> close ->
+    // onClose) is exercised by tests.
+    if ("onClose" in this && typeof this.onClose === "function") {
+      this.onClose();
+    }
+  }
 }
 
 export class PluginSettingTab {
@@ -92,14 +98,23 @@ export class Setting {
   }
 
   addText(callback: (text: { inputEl: { type: string }; setValue(value: string): void; onChange(callback: (value: string) => Promise<void>): void }) => void): this {
+    // inputEl records DOM listeners and exposes trigger() so tests can simulate real events
+    // (e.g. keydown Enter) — the paths that would otherwise be untested no-ops in the mock.
+    const listeners: Record<string, (event: unknown) => void> = {};
+    const inputEl = {
+      type: "text",
+      addEventListener(event: string, handler: (event: unknown) => void) { listeners[event] = handler; },
+      focus() {},
+      trigger(event: string, arg: unknown) { listeners[event]?.(arg); }
+    };
     const input: {
       value?: string;
       onchange?: (value: string) => Promise<void>;
-      inputEl: { type: string };
+      inputEl: typeof inputEl;
       setValue(value: string): void;
       onChange(callback: (value: string) => Promise<void>): void;
     } = {
-      inputEl: { type: "text" },
+      inputEl,
       setValue(value: string) {
         input.value = value;
       },
@@ -167,6 +182,15 @@ export class Plugin {
     this.registeredIntervals.push(id);
     return id;
   }
+  registeredViews: Array<{ type: string; factory: (leaf: unknown) => unknown }> = [];
+  registerView(type: string, factory: (leaf: unknown) => unknown): void {
+    this.registeredViews.push({ type, factory });
+  }
+  ribbonIcons: Array<{ icon: string; title: string; callback: () => void }> = [];
+  addRibbonIcon(icon: string, title: string, callback: () => void): ReturnType<typeof createMockElement> {
+    this.ribbonIcons.push({ icon, title, callback });
+    return createMockElement();
+  }
   addStatusBarItem(): { text: string; setText(text: string): void } {
     const item = {
       text: "",
@@ -178,6 +202,34 @@ export class Plugin {
     };
     this.statusBarItems.push(item);
     return item;
+  }
+}
+
+export class WorkspaceLeaf {
+  view: unknown;
+  viewState: unknown;
+  async setViewState(state: unknown): Promise<void> {
+    this.viewState = state;
+  }
+}
+
+export class ItemView {
+  app: unknown;
+  containerEl = createMockElement();
+  contentEl = createMockElement();
+
+  constructor(public leaf: unknown) {
+    this.app = (leaf as { app?: unknown })?.app;
+  }
+
+  getViewType(): string {
+    return "";
+  }
+  getDisplayText(): string {
+    return "";
+  }
+  getIcon(): string {
+    return "";
   }
 }
 
@@ -193,26 +245,95 @@ export function loadPdfJs(): Promise<unknown> {
   return Promise.resolve({});
 }
 
+export function setIcon(el: unknown, icon: string): void {
+  // Record the icon on the element so tests can assert on it if needed; harmless otherwise.
+  if (el && typeof el === "object") (el as { icon?: string }).icon = icon;
+}
+
+export class MarkdownRenderer {
+  // Push the raw markdown as text so the view's assertions on rendered content keep working,
+  // mirroring the real renderer closely enough for unit tests.
+  static async render(_app: unknown, markdown: string, el: { setText(text?: string): void }, _sourcePath: string, _component: unknown): Promise<void> {
+    el.setText(markdown);
+  }
+  static async renderMarkdown(markdown: string, el: { setText(text?: string): void }, _sourcePath: string, _component: unknown): Promise<void> {
+    el.setText(markdown);
+  }
+}
+
+interface MockField {
+  value: string;
+  disabled: boolean;
+  placeholder?: string;
+  rows?: number;
+  style: { setProperty(name: string, value: string): void };
+  focus(): void;
+  addEventListener(event: string, handler: (event: unknown) => void): void;
+  trigger(event: string, arg: unknown): void;
+  addClass(className?: string): void;
+  setAttr(name?: string, value?: string): void;
+}
+
+// A <button> stand-in that records its own text/classes/icon so tests can select a specific
+// button by role (e.g. the send button) instead of relying on creation order.
+interface MockButton {
+  onclick?: () => void | Promise<void>;
+  disabled: boolean;
+  text?: string;
+  icon?: string;
+  classes: string[];
+  style: { setProperty(name: string, value: string): void };
+  addClass(className?: string): void;
+  removeClass(className?: string): void;
+  setText(text?: string): void;
+  setAttr(name?: string, value?: string): void;
+  addEventListener(event: string, handler: (event: unknown) => void): void;
+  trigger(event: string, arg: unknown): void;
+  createSpan(): ReturnType<typeof createMockElement>;
+}
+
+// A settable <textarea>/<input> stand-in: records value/disabled and lets tests simulate real
+// DOM events via trigger() (so keydown/Enter handlers run for real, not as no-ops).
+function createMockField(): MockField {
+  const listeners: Record<string, (event: unknown) => void> = {};
+  const field: MockField = {
+    value: "",
+    disabled: false,
+    style: { setProperty() {} },
+    focus() {},
+    addEventListener(event, handler) { listeners[event] = handler; },
+    trigger(event, arg) { listeners[event]?.(arg); },
+    addClass() {},
+    setAttr() {}
+  };
+  return field;
+}
+
 function createMockElement() {
   const element: {
-    buttons: Array<{ onclick?: () => void | Promise<void>; disabled?: boolean; addClass(className?: string): void }>;
+    buttons: MockButton[];
     toggles: Array<{ onchange?: (value: boolean) => Promise<void>; value?: boolean }>;
     textInputs: Array<{ value?: string; onchange?: (value: string) => Promise<void> }>;
+    fields: MockField[];
     texts: string[];
     classes: string[];
     styles: Record<string, string>;
     style: { setProperty(name: string, value: string): void };
     empty(): void;
-    createEl(tag?: string, options?: { text?: string }): ReturnType<typeof createMockElement> | { onclick?: () => void | Promise<void>; disabled?: boolean; addClass(className?: string): void };
+    remove(): void;
+    createEl(tag?: string, options?: { text?: string; cls?: string }): ReturnType<typeof createMockElement> | MockButton | MockField;
     createDiv(): ReturnType<typeof createMockElement>;
     createSpan(): ReturnType<typeof createMockElement>;
     setText(text?: string): void;
-    addClass(): void;
+    addClass(className?: string): void;
+    removeClass(className?: string): void;
+    setAttr(name?: string, value?: string): void;
     appendChild(): void;
   } = {
     buttons: [],
     toggles: [],
     textInputs: [],
+    fields: [],
     texts: [],
     classes: [],
     styles: {},
@@ -226,34 +347,64 @@ function createMockElement() {
       element.buttons.length = 0;
       element.toggles.length = 0;
       element.textInputs.length = 0;
+      element.fields.length = 0;
       element.classes.length = 0;
       element.styles = {};
     },
-    createEl(tag?: string, options?: { text?: string }) {
+    remove() {},
+    createEl(tag?: string, options?: { text?: string; cls?: string }) {
       if (options?.text) element.texts.push(options.text);
       if (tag === "button") {
-        const button: { onclick?: () => void | Promise<void>; disabled?: boolean; addClass(className?: string): void } = {
+        const classes: string[] = [];
+        const listeners: Record<string, (event: unknown) => void> = {};
+        const button: MockButton = {
+          disabled: false,
+          text: options?.text,
+          classes,
+          style: { setProperty() {} },
           addClass(className?: string) {
-            if (className) element.classes.push(className);
-          }
+            if (className) { classes.push(className); element.classes.push(className); }
+          },
+          removeClass(className?: string) {
+            const index = classes.indexOf(className ?? "");
+            if (index >= 0) classes.splice(index, 1);
+          },
+          setText(text?: string) {
+            button.text = text;
+            if (text) element.texts.push(text);
+          },
+          setAttr() {},
+          addEventListener(event, handler) { listeners[event] = handler; },
+          trigger(event, arg) { listeners[event]?.(arg); },
+          createSpan() { return createMockElement(); }
         };
+        if (options?.cls) button.addClass(options.cls);
         element.buttons.push(button);
         return button;
+      }
+      if (tag === "textarea" || tag === "input") {
+        const field = createMockField();
+        if (options?.cls) field.addClass(options.cls);
+        element.fields.push(field);
+        return field;
       }
       const child = createMockElement();
       child.buttons = element.buttons;
       child.toggles = element.toggles;
+      child.fields = element.fields;
       child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
       child.styles = element.styles;
       child.style = element.style;
+      if (options?.cls) child.addClass(options.cls);
       return child;
     },
     createDiv() {
       const child = createMockElement();
       child.buttons = element.buttons;
       child.toggles = element.toggles;
+      child.fields = element.fields;
       child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
@@ -265,6 +416,7 @@ function createMockElement() {
       const child = createMockElement();
       child.buttons = element.buttons;
       child.toggles = element.toggles;
+      child.fields = element.fields;
       child.textInputs = element.textInputs;
       child.texts = element.texts;
       child.classes = element.classes;
@@ -278,6 +430,11 @@ function createMockElement() {
     addClass(className?: string) {
       if (className) element.classes.push(className);
     },
+    removeClass(className?: string) {
+      const index = element.classes.indexOf(className ?? "");
+      if (index >= 0) element.classes.splice(index, 1);
+    },
+    setAttr() {},
     appendChild() {}
   };
   return element;

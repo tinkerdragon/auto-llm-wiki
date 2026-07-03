@@ -1,19 +1,27 @@
 import { EventRef, Notice, Plugin, TAbstractFile, TFile } from "obsidian";
-import { parseChangePlan, planHasDestructiveOperation, validateChangePlan } from "./changePlan";
+import { normalizePath, parseChangePlan, planHasDestructiveOperation, validateChangePlan } from "./changePlan";
 import { t } from "./i18n";
-import { buildIngestPrompt, buildLintPrompt, buildQueryPrompt, buildQuerySelectionPrompt, parseSelectedQueryPages } from "./prompts";
+import { buildChatContextMessage, buildChatSystemPrompt, buildIngestPrompt, buildLintPrompt, buildQueryPrompt, buildQuerySelectionPrompt, parseSelectedQueryPages } from "./prompts";
 import { OpenAIProvider, OpenAIProviderError } from "./providers/OpenAIProvider";
 import { ChangePlanPreviewModal } from "./previewModal";
+import { ChatController, ChatMessage, ChatState, Conversation, ChatView, CHAT_VIEW_TYPE } from "./chatView";
 import { findChangedRawFiles, findRawFileCandidates, ImageOcrRequest, migrateRawFileState, PdfOcrRequest, RawFileState, renderPdfPageToPngDataUrl, updateRawFileState } from "./rawTracker";
 import { DEFAULT_SETTINGS, LLMWikiSettingTab } from "./settings";
 import { LLMWikiPluginData, LLMWikiSettings } from "./types";
 import { applyChangePlan, listMarkdownFilePaths, listMarkdownFiles, readTextFile, readWikiPages } from "./vaultOps";
 
 const QUERY_MAX_PAGES = 12;
+// Cap the conversation turns sent to the model so history + per-turn wiki context stays within
+// the context window. The full thread is still kept in the view for display.
+const CHAT_HISTORY_MAX_MESSAGES = 12;
 
-export default class LLMWikiPlugin extends Plugin {
+export default class LLMWikiPlugin extends Plugin implements ChatController {
   settings: LLMWikiSettings = DEFAULT_SETTINGS;
   rawFileState: RawFileState = {};
+  chatState: ChatState = { conversations: [], activeId: null };
+  // Number of chat turns currently awaiting a reply. Concurrent conversations are allowed, so the
+  // status bar is only reset to idle when the last one finishes (not the first).
+  private answerChatInFlight = 0;
   private statusBarItem?: HTMLElement;
   private autoIngestTimer?: ReturnType<typeof setTimeout>;
   private autoIngestEventRefs: EventRef[] = [];
@@ -28,6 +36,9 @@ export default class LLMWikiPlugin extends Plugin {
     this.addSettingTab(new LLMWikiSettingTab(this.app, this));
     this.registerAutoIngestListeners();
 
+    this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
+    this.addRibbonIcon("message-circle", t("command.openChat"), () => void this.openChatView());
+
     this.addCommand({
       id: "ingest-active-source",
       name: t("command.ingestActiveSource"),
@@ -37,7 +48,7 @@ export default class LLMWikiPlugin extends Plugin {
     this.addCommand({
       id: "query-wiki",
       name: t("command.queryWiki"),
-      callback: () => this.queryWiki()
+      callback: () => void this.openChatView()
     });
 
     this.addCommand({
@@ -48,18 +59,19 @@ export default class LLMWikiPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = await this.loadData() as (LLMWikiPluginData & Partial<LLMWikiSettings>) | undefined;
-    // Keep persisted-but-non-setting data (rawFileState) and the removed `provider` key out of
-    // the settings object so they aren't re-saved as if they were live settings.
-    const { rawFileState, ...rest } = data ?? {};
+    const data = await this.loadData() as (LLMWikiPluginData & Partial<LLMWikiSettings> & { chatState?: ChatState }) | undefined;
+    // Keep persisted-but-non-setting data (rawFileState, chatState) and the removed `provider` key
+    // out of the settings object so they aren't re-saved as if they were live settings.
+    const { rawFileState, chatState, ...rest } = data ?? {};
     const settingsData: Record<string, unknown> = { ...rest };
     delete settingsData.provider;
     this.settings = { ...DEFAULT_SETTINGS, ...settingsData };
     this.rawFileState = migrateRawFileState(rawFileState);
+    this.chatState = normalizeChatState(chatState);
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData({ ...this.settings, rawFileState: this.rawFileState });
+    await this.saveData({ ...this.settings, rawFileState: this.rawFileState, chatState: this.chatState });
   }
 
   setStatus(message: string): void {
@@ -231,25 +243,94 @@ export default class LLMWikiPlugin extends Plugin {
     }
   }
 
-  private async queryWiki(): Promise<void> {
-    const question = window.prompt(t("prompt.queryQuestion"));
-    if (!question) return;
+  async openChatView(): Promise<void> {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (!rightLeaf) return;
+      await rightLeaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+      leaf = rightLeaf;
+    }
+    workspace.revealLeaf(leaf);
+  }
+
+  hasApiKey(): boolean {
+    return Boolean(this.settings.openAIApiKey);
+  }
+
+  // ChatController: the conversation store lives in plugin data so it survives the leaf closing and
+  // an Obsidian restart. The view mutates its own copy and writes back through saveChatState.
+  loadChatState(): ChatState {
+    return this.chatState;
+  }
+
+  saveChatState(state: ChatState): void {
+    // Enforce the cap on save too (not only on load) so persisted data cannot grow unbounded
+    // within a long session. Newest conversations are stored at the front.
+    const conversations = state.conversations.slice(0, MAX_STORED_CONVERSATIONS);
+    const activeId = conversations.some((conversation) => conversation.id === state.activeId)
+      ? state.activeId
+      : conversations[0]?.id ?? null;
+    this.chatState = { conversations, activeId };
+    void this.saveSettings();
+  }
+
+  // ChatController: answer one turn conversationally, grounded in the wiki. Read-only w.r.t. the
+  // vault (no writes); errors are localized so the view can display error.message directly. The
+  // whole body (retrieval + selection + the chat call) is inside the try so any failure is
+  // localized and the status bar is always reset.
+  async answerChat(messages: ChatMessage[]): Promise<string> {
+    this.answerChatInFlight++;
+    try {
+      // Retrieve against the recent conversation, not just the last message, so a follow-up like
+      // "expand on that" still pulls the pages the thread is actually about.
+      const query = buildRetrievalQuery(messages);
+      this.setStatus(t("status.readingVaultContext"));
+      const index = await readTextFile(this.app, this.settings.indexPath);
+      const pagePaths = this.listWikiContentPages();
+      const selectedPaths = await this.selectRelevantPages(index, query, pagePaths);
+      const wikiPages = await readWikiPages(this.app, selectedPaths);
+      this.setStatus(t("status.waitingModel"));
+      const provider = this.createProvider();
+      // Wiki context rides in the system message so the conversation array stays a clean sequence
+      // of alternating user/assistant turns (no synthetic user turn before the real question).
+      const systemContent = `${buildChatSystemPrompt(this.settings)}\n\n${buildChatContextMessage({ index, wikiPages }, this.settings)}`;
+      return await provider.chat({
+        apiKey: this.settings.openAIApiKey,
+        apiUrl: this.settings.openAIApiUrl,
+        model: this.settings.openAIModel,
+        messages: [
+          { role: "system", content: systemContent },
+          ...messages.slice(-CHAT_HISTORY_MAX_MESSAGES)
+        ]
+      });
+    } catch (error) {
+      throw new Error(formatOpenAIErrorMessage(error, t("error.requestFailed")));
+    } finally {
+      this.answerChatInFlight--;
+      // Only clear the status bar when no other chat turn is still running.
+      if (this.answerChatInFlight === 0) this.setStatus(t("status.idle"));
+    }
+  }
+
+  // ChatController: file a finished Q&A back through the reviewed change-plan pipeline.
+  async saveChatAnswer(question: string, answer: string): Promise<void> {
     if (!this.settings.openAIApiKey) {
       new Notice(t("notice.missingOpenAIKey"));
       return;
     }
     try {
-      const readingMessage = t("status.readingVaultContext");
-      this.setStatus(readingMessage);
-      new Notice(readingMessage);
+      this.setStatus(t("status.readingVaultContext"));
       const index = await readTextFile(this.app, this.settings.indexPath);
-      const pagePaths = listMarkdownFilePaths(this.app, this.settings.wikiFolder);
+      const pagePaths = this.listWikiContentPages();
       const selectedPaths = await this.selectRelevantPages(index, question, pagePaths);
       const wikiPages = await readWikiPages(this.app, selectedPaths);
       const prompt = buildQueryPrompt({
         index,
         log: await readTextFile(this.app, this.settings.logPath),
         question,
+        answer,
         wikiPages
       }, this.settings);
       await this.runPrompt(prompt);
@@ -258,6 +339,15 @@ export default class LLMWikiPlugin extends Plugin {
       this.setStatus(t("status.error", { message }));
       new Notice(message);
     }
+  }
+
+  // Wiki content pages sent as chat/query context: every markdown page in the wiki folder EXCEPT
+  // the index and log. The index is already sent separately, and the log is operational history,
+  // not knowledge — including either would duplicate the index and leak log content to the model.
+  private listWikiContentPages(): string[] {
+    const excluded = new Set([normalizePath(this.settings.indexPath), normalizePath(this.settings.logPath)]);
+    return listMarkdownFilePaths(this.app, this.settings.wikiFolder)
+      .filter((path) => !excluded.has(normalizePath(path)));
   }
 
   // Karpathy-style query: read the index first and let the model pick the relevant pages,
@@ -334,6 +424,67 @@ export default class LLMWikiPlugin extends Plugin {
       new Notice(message);
     }
   }
+}
+
+const MAX_STORED_CONVERSATIONS = 50;
+
+// Build the retrieval query from the recent user turns so page selection reflects the whole thread
+// rather than a terse latest message. Assistant turns are excluded to keep the query on-topic.
+function buildRetrievalQuery(messages: ChatMessage[]): string {
+  const RECENT_USER_TURNS = 4;
+  const recent = messages
+    .filter((message) => message.role === "user")
+    .slice(-RECENT_USER_TURNS)
+    .map((message) => message.content);
+  return recent.length > 0 ? recent.join("\n") : (messages[messages.length - 1]?.content ?? "");
+}
+
+// Defend against corrupted/old plugin data: keep only well-shaped conversations, sanitize each
+// one's messages, cap the count (newest are stored first), and pin activeId to a conversation
+// that still exists.
+export function normalizeChatState(raw: unknown): ChatState {
+  const state = raw as Partial<ChatState> | undefined;
+  const conversations = (Array.isArray(state?.conversations) ? state.conversations : [])
+    .filter(isValidConversation)
+    .map(sanitizeConversation)
+    .slice(0, MAX_STORED_CONVERSATIONS);
+  const activeId = typeof state?.activeId === "string" ? state.activeId : null;
+  return {
+    conversations,
+    activeId: conversations.some((conversation) => conversation.id === activeId)
+      ? activeId
+      : conversations[0]?.id ?? null
+  };
+}
+
+function isValidConversation(value: unknown): value is Conversation {
+  const conversation = value as Partial<Conversation> | undefined;
+  return Boolean(
+    conversation &&
+    typeof conversation.id === "string" &&
+    typeof conversation.title === "string" &&
+    Array.isArray(conversation.messages)
+  );
+}
+
+function isValidMessage(value: unknown): value is ChatMessage {
+  const message = value as Partial<ChatMessage> | undefined;
+  return Boolean(message && (message.role === "user" || message.role === "assistant") && typeof message.content === "string");
+}
+
+// Drop malformed messages, coerce timestamps to numbers, and remove any trailing user turn — a
+// question whose reply never arrived (the app closed mid-request). Leaving it would make the next
+// send stack two consecutive user turns, and the in-memory "pending" indicator is already gone.
+function sanitizeConversation(conversation: Conversation): Conversation {
+  const messages = conversation.messages.filter(isValidMessage);
+  while (messages.length > 0 && messages[messages.length - 1].role === "user") messages.pop();
+  return {
+    id: conversation.id,
+    title: typeof conversation.title === "string" ? conversation.title : "",
+    messages,
+    createdAt: typeof conversation.createdAt === "number" ? conversation.createdAt : 0,
+    updatedAt: typeof conversation.updatedAt === "number" ? conversation.updatedAt : 0
+  };
 }
 
 export function formatOpenAIErrorMessage(error: unknown, fallbackMessage: string): string {

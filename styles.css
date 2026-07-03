@@ -169,3 +169,511 @@
 .auto-llm-wiki-action-bar button {
   min-width: 112px;
 }
+
+/* Chat view */
+.auto-llm-wiki-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background-primary);
+}
+
+.auto-llm-wiki-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.auto-llm-wiki-chat-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.auto-llm-wiki-chat-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--text-normal);
+}
+
+.auto-llm-wiki-chat-subtitle {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Icon buttons shared by the header and composer */
+.auto-llm-wiki-chat-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.auto-llm-wiki-chat-iconbtn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.auto-llm-wiki-chat-newchat:hover {
+  color: var(--interactive-accent);
+}
+
+/* Messages area */
+.auto-llm-wiki-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 16px;
+  scroll-behavior: smooth;
+}
+
+/* Empty state */
+.auto-llm-wiki-chat-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.auto-llm-wiki-chat-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 6px;
+  border-radius: 16px;
+  color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+.auto-llm-wiki-chat-empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.auto-llm-wiki-chat-empty-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-normal);
+}
+
+.auto-llm-wiki-chat-empty-subtitle {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.auto-llm-wiki-chat-suggestions-label {
+  margin-top: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.auto-llm-wiki-chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.auto-llm-wiki-chat-suggestion {
+  padding: 10px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 0.86rem;
+  text-align: left;
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.auto-llm-wiki-chat-suggestion:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  transform: translateY(-1px);
+}
+
+/* Message rows */
+.auto-llm-wiki-chat-message {
+  display: flex;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.auto-llm-wiki-chat-message-user {
+  justify-content: flex-end;
+}
+
+.auto-llm-wiki-chat-message-assistant {
+  justify-content: flex-start;
+}
+
+.auto-llm-wiki-chat-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  border-radius: 8px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.auto-llm-wiki-chat-avatar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.auto-llm-wiki-chat-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.auto-llm-wiki-chat-message-user .auto-llm-wiki-chat-main {
+  align-items: flex-end;
+  max-width: 86%;
+}
+
+.auto-llm-wiki-chat-message-assistant .auto-llm-wiki-chat-main {
+  max-width: calc(100% - 38px);
+}
+
+.auto-llm-wiki-chat-name {
+  padding-left: 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.auto-llm-wiki-chat-body {
+  padding: 10px 14px;
+  border-radius: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.auto-llm-wiki-chat-message-user .auto-llm-wiki-chat-body {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+}
+
+.auto-llm-wiki-chat-message-assistant .auto-llm-wiki-chat-body {
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-bottom-left-radius: 4px;
+}
+
+/* Tighten Markdown spacing inside assistant bubbles */
+.auto-llm-wiki-chat-body > :first-child {
+  margin-top: 0;
+}
+
+.auto-llm-wiki-chat-body > :last-child {
+  margin-bottom: 0;
+}
+
+.auto-llm-wiki-chat-body p {
+  margin: 0 0 8px 0;
+}
+
+.auto-llm-wiki-chat-body pre {
+  margin: 8px 0;
+  padding: 12px;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.auto-llm-wiki-chat-body ul,
+.auto-llm-wiki-chat-body ol {
+  margin: 6px 0;
+  padding-left: 1.3em;
+}
+
+/* Message actions (copy / save) — revealed on hover or focus */
+.auto-llm-wiki-chat-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  padding-left: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.auto-llm-wiki-chat-message-assistant:hover .auto-llm-wiki-chat-actions,
+.auto-llm-wiki-chat-message-assistant:focus-within .auto-llm-wiki-chat-actions {
+  opacity: 1;
+}
+
+.auto-llm-wiki-chat-actionbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.auto-llm-wiki-chat-actionbtn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.auto-llm-wiki-chat-actionbtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.auto-llm-wiki-chat-actionbtn.is-copied {
+  color: var(--interactive-accent);
+}
+
+/* Thinking indicator */
+.auto-llm-wiki-chat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  background: var(--background-secondary);
+}
+
+.auto-llm-wiki-chat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: auto-llm-wiki-chat-bounce 1.2s infinite ease-in-out;
+}
+
+.auto-llm-wiki-chat-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.auto-llm-wiki-chat-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes auto-llm-wiki-chat-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Error bubble */
+.auto-llm-wiki-chat-error {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: var(--text-error);
+  background: color-mix(in srgb, var(--background-modifier-error) 40%, var(--background-secondary));
+  border: 1px solid var(--background-modifier-error);
+}
+
+/* Composer */
+.auto-llm-wiki-chat-composer {
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.auto-llm-wiki-chat-inputwrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  background: var(--background-secondary);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.auto-llm-wiki-chat-inputwrap:focus-within {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 24%, transparent);
+}
+
+.auto-llm-wiki-chat-input {
+  flex: 1;
+  min-height: 24px;
+  max-height: 200px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: none;
+}
+
+.auto-llm-wiki-chat-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.auto-llm-wiki-chat-send {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.auto-llm-wiki-chat-send:hover {
+  background: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+}
+
+.auto-llm-wiki-chat-send.is-disabled,
+.auto-llm-wiki-chat-send.is-disabled:hover {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  opacity: 0.7;
+  cursor: default;
+}
+
+.auto-llm-wiki-chat-hint {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+/* Conversation history panel (toggled from the header) */
+.auto-llm-wiki-chat-history {
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+}
+
+.auto-llm-wiki-chat-history-empty {
+  margin: auto;
+  padding: 24px 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.auto-llm-wiki-chat-history-item-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 10px;
+}
+
+.auto-llm-wiki-chat-history-item-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.auto-llm-wiki-chat-history-item-row.is-active {
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+.auto-llm-wiki-chat-history-item {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: 0.86rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.auto-llm-wiki-chat-history-item-row.is-active .auto-llm-wiki-chat-history-item {
+  font-weight: 600;
+  color: var(--interactive-accent);
+}
+
+.auto-llm-wiki-chat-history-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.auto-llm-wiki-chat-history-item-row:hover .auto-llm-wiki-chat-history-action {
+  opacity: 1;
+}
+
+.auto-llm-wiki-chat-history-rename:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.auto-llm-wiki-chat-history-delete:hover {
+  color: var(--text-error);
+  background: var(--background-modifier-hover);
+}
+
+.auto-llm-wiki-chat-history-action svg {
+  width: 15px;
+  height: 15px;
+}

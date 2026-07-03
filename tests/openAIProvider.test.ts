@@ -20,6 +20,38 @@ test("sends chat completion request and returns text", async () => {
   expect(JSON.parse(calls[0].options.body).model).toBe("gpt-test");
 });
 
+test("chat sends the given messages verbatim and returns plain text", async () => {
+  const calls: Array<{ options: { body: string } }> = [];
+  const provider = new OpenAIProvider(async (request) => {
+    calls.push(request);
+    return { status: 200, text: JSON.stringify({ choices: [{ message: { content: "A plain answer" } }] }) };
+  });
+
+  const messages = [
+    { role: "system" as const, content: "Answer from the wiki. Never JSON." },
+    { role: "user" as const, content: "What is X?" }
+  ];
+  const result = await provider.chat({ apiKey: "key", model: "gpt-test", messages });
+
+  const body = JSON.parse(calls[0].options.body);
+  expect(result).toBe("A plain answer");
+  // The exact messages are sent through; no strict-JSON system prompt is injected.
+  expect(body.messages).toEqual(messages);
+});
+
+test("chat does not reject on truncation (returns the partial answer)", async () => {
+  const provider = new OpenAIProvider(async () => ({
+    status: 200,
+    text: JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "partial answer" } }] })
+  }));
+
+  await expect(provider.chat({
+    apiKey: "key",
+    model: "m",
+    messages: [{ role: "user", content: "hi" }]
+  })).resolves.toBe("partial answer");
+});
+
 test("sends vision chat completion request and returns OCR text", async () => {
   const calls: Array<{ url: string; options: { body: string; headers: Record<string, string>; method: string } }> = [];
   const provider = new OpenAIProvider(async (request) => {

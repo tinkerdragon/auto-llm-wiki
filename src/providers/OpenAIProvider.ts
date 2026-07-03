@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { CompleteRequest, ConnectionTestRequest, LLMProvider, VisionCompleteRequest } from "./LLMProvider";
+import { ChatRequest, CompleteRequest, ConnectionTestRequest, LLMProvider, VisionCompleteRequest } from "./LLMProvider";
 
 type HttpRequest = {
   url: string;
@@ -112,6 +112,15 @@ export class OpenAIProvider implements LLMProvider {
     ], false);
   }
 
+  async chat(request: ChatRequest): Promise<string> {
+    // Conversational answers may be long and are still useful if the model stops early, so
+    // (like OCR) they are not rejected on truncation. The caller supplies the full message list
+    // including a plain-text system prompt — no strict-JSON persona is injected here.
+    // Streaming (SSE) is intentionally omitted for v1; the Promise<string> shape leaves room
+    // for a later onToken callback without changing callers.
+    return this.completeMessages(request, request.messages, false);
+  }
+
   async testConnection(request: ConnectionTestRequest): Promise<void> {
     const response = await this.withTimeout(this.httpClient({
       url: request.apiUrl || DEFAULT_OPENAI_API_URL,
@@ -134,7 +143,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private async completeMessages(
-    request: CompleteRequest,
+    request: { apiKey: string; apiUrl?: string; model: string },
     messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
     rejectOnTruncation = false
   ): Promise<string> {
