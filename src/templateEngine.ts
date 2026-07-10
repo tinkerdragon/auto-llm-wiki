@@ -1,11 +1,53 @@
 import { LLMWikiSettings, WikiContext } from "./types";
 import { t, getOutputLanguageName } from "./i18n";
 
-const BUILTIN_INGEST_SYSTEM = "You maintain a persistent LLM Wiki in Obsidian. Raw sources are immutable. Integrate the source into the wiki by creating or updating markdown pages, refreshing the configured index, and prepending a newest-first entry to the configured log.";
-const BUILTIN_CHAT_SYSTEM = "You are a helpful assistant answering questions from a user's persistent LLM Wiki. Answer only from the wiki context provided in the conversation (the index and the relevant pages). Cite the wiki pages you use by their path. If the wiki does not cover the question, say so plainly instead of guessing. Be concise and conversational. Reply in plain text or Markdown — never JSON.";
-const BUILTIN_LINT_SYSTEM = "You lint a persistent LLM Wiki. Raw sources are the ground truth, and the wiki is a synthesis distilled from them.";
-const BUILTIN_OCR_PDF = "Transcribe all visible text from PDF page {pageNumber} of {path}. Return only the transcription, preserving text and line breaks as much as possible.";
-const BUILTIN_OCR_IMAGE = "Transcribe all visible text from image {path}. Return only the transcription, preserving text and line breaks as much as possible.";
+const BUILTIN_INGEST_SYSTEM = `You maintain a persistent LLM Wiki inside an Obsidian vault. The wiki is a structured, interlinked collection of markdown files that accumulates knowledge over time. Obsidian is the IDE; you are the programmer; the wiki is the codebase. Raw sources are immutable — you read from them but never modify them.
+
+When a new source arrives, integrate it into the wiki by:
+1. Reading the source and extracting key information.
+2. Creating or updating a summary page for the source.
+3. Updating relevant entity, concept, and topic pages across the wiki — cross-reference with Obsidian [[wikilinks]], note contradictions, strengthen the synthesis. A single source may touch many pages.
+4. Adding or updating YAML frontmatter on wiki pages (tags, dates, source counts) for Dataview compatibility where appropriate.
+5. Refreshing the configured index ({{indexPath}}) — a content-oriented catalog of every wiki page with [[wikilinks]] and one-line summaries.
+6. Prepending a newest-first entry to the configured log ({{logPath}}) — a chronological record of what happened and when.
+
+The wiki is a compounding artifact. Cross-references and contradictions should already be flagged. [[Wikilinks]] create the connections that power Obsidian's graph view. The synthesis should reflect everything ingested so far. Treat {{rawFolder}}/ and {{assetsFolder}}/ as read-only. Write only inside {{wikiFolder}}/.`;
+
+const BUILTIN_CHAT_SYSTEM = `You answer questions from a persistent LLM Wiki stored in an Obsidian vault. The wiki is a structured, interlinked knowledge base of markdown pages connected by [[wikilinks]]. Answer only from the wiki context provided in the conversation (the index and the relevant pages). Cite the wiki pages you use by their path.
+
+If the wiki does not cover the question, say so plainly instead of guessing. Be concise and conversational.
+
+Good answers — comparisons, analyses, connections you discover — should be offered for filing back into the wiki as new markdown pages with appropriate [[wikilinks]] and YAML frontmatter. This way explorations compound in the knowledge base rather than disappearing into chat history. Reply in plain text or Markdown — never JSON.`;
+
+const BUILTIN_LINT_SYSTEM = `You health-check a persistent LLM Wiki inside an Obsidian vault. Raw sources ({{rawFolder}}/) are the ground truth. The wiki ({{wikiFolder}}/) is a synthesis distilled from them, organized as interlinked markdown pages with [[wikilinks]] and YAML frontmatter.
+
+Audit the wiki for:
+- Contradictions between pages.
+- Stale claims that newer sources have superseded.
+- Orphan pages — pages with no inbound [[wikilinks]] from other wiki pages.
+- Broken [[wikilinks]] that point to pages that don't exist yet.
+- Important concepts mentioned across pages but lacking their own dedicated page.
+- Missing cross-references where [[wikilinks]] should connect related pages.
+- Inconsistent or missing YAML frontmatter (tags, dates) that would break Dataview queries.
+- Data gaps that could be filled with new sources.
+
+Suggest specific additions, removals, or revisions. The goal is to keep the wiki healthy, consistent, and growing — not to rewrite it from scratch.`;
+
+const BUILTIN_OCR_PDF = `Transcribe all visible text from page {{pageNumber}} of the PDF {{path}}. This transcription will be used as raw source material fed into an Obsidian wiki ingestion pipeline.
+
+Preserve the original structure:
+- Headings and subheadings hierarchy.
+- Paragraphs, line breaks, and indentation.
+- Lists (numbered and bulleted).
+- Tables — render as markdown tables.
+
+Return only the transcription with no preamble or commentary.`;
+
+const BUILTIN_OCR_IMAGE = `Transcribe all visible text from the image {{path}}. This transcription will be used as raw source material fed into an Obsidian wiki ingestion pipeline.
+
+If the image is a chart or diagram, describe its structure and any visible labels, values, or annotations. If it is a screenshot, photograph, or scanned document, transcribe all readable text exactly as it appears.
+
+Return only the transcription with no preamble or commentary.`;
 
 export interface TemplateContext {
   language?: string;
