@@ -61,8 +61,14 @@ export interface LLMWikiSettings {
   qdrantApiKey: string;
   qdrantCollection: string;
   // Git integration
-  gitAutoCommit: boolean;
+  gitMode: "none" | "local" | "remote";
+  gitRemoteMethod: "ssh-manual" | "ssh-keygen" | "github-api";
+  gitRemoteUrl: string;
+  gitAutoPush: boolean;
   gitCommitMessageTemplate: string;
+  gitHubToken: string;
+  gitHubRepoName: string;
+  gitSshKeyPath: string;
 }
 
 export type FileOperationKind = "create" | "update" | "append" | "prepend" | "delete";

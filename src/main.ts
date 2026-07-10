@@ -1,4 +1,4 @@
-import { EventRef, Notice, Plugin, TAbstractFile, TFile } from "obsidian";
+import { EventRef, Notice, Plugin, TAbstractFile, TFile, requestUrl } from "obsidian";
 import { normalizePath, parseChangePlan, planHasDestructiveOperation, validateChangePlan } from "./changePlan";
 import { t } from "./i18n";
 import { templateEngine } from "./templateEngine";
@@ -38,6 +38,8 @@ export default class LLMWikiPlugin extends Plugin implements ChatController {
   private autoIngestRunning = false;
   private autoIngestPending = false;
   private autoIngestPollTimer?: number;
+  githubUser: string | null = null;
+  githubRepoExists = false;
 
   async onload(): Promise<void> {
     registerBuiltinProviders();
@@ -67,6 +69,12 @@ export default class LLMWikiPlugin extends Plugin implements ChatController {
       name: t("command.lintWiki"),
       callback: () => this.lintWiki()
     });
+
+    this.addCommand({
+      id: "push-wiki-changes",
+      name: t("command.pushWiki"),
+      callback: () => this.pushWikiCommand()
+    });
   }
 
   async loadSettings(): Promise<void> {
@@ -77,6 +85,8 @@ export default class LLMWikiPlugin extends Plugin implements ChatController {
     this.settings = { ...DEFAULT_SETTINGS, ...settingsData };
     // Migrate old single-provider fields to providers[] array.
     this.settings = migrateProviderSettings(this.settings);
+    // Migrate old gitAutoCommit boolean to gitMode enum.
+    this.settings = migrateGitSettings(this.settings, settingsData);
     this.rawFileState = migrateRawFileState(rawFileState);
     this.chatState = normalizeChatState(chatState);
   }
@@ -547,28 +557,219 @@ ${p.content}`).join("\n\n");
     }
   }
 
+  private async execGit(args: string, env?: Record<string, string>): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+    if (typeof (window as unknown as { require?: (module: string) => unknown }).require === "undefined") {
+      return { ok: false, stdout: "", stderr: "Electron require not available" };
+    }
+    const childProcess = (window as unknown as { require: (module: string) => { exec: (cmd: string, options: unknown, callback: (err: unknown, stdout: string, stderr: string) => void) => unknown } }).require("child_process");
+    const vaultPath = (this.app.vault.adapter as { getBasePath?: () => string }).getBasePath?.() ?? "";
+    if (!vaultPath) return { ok: false, stdout: "", stderr: "Vault path not available" };
+    return new Promise((resolve) => {
+      childProcess.exec(args, { cwd: vaultPath, env: { ...process.env, ...env } }, (err, stdout, stderr) => {
+        resolve({ ok: !err, stdout: (stdout || "").trim(), stderr: (stderr || "").trim() });
+      });
+    });
+  }
+
+  private async ensureGitRepo(): Promise<boolean> {
+    const check = await this.execGit("git --version");
+    if (!check.ok) {
+      new Notice(t("notice.gitNotInstalled"));
+      return false;
+    }
+    const repoCheck = await this.execGit("git rev-parse --git-dir");
+    if (repoCheck.ok) return true;
+    const init = await this.execGit("git init");
+    if (!init.ok) {
+      new Notice(t("notice.gitInitFailed"));
+      return false;
+    }
+    return true;
+  }
+
+  private async ensureRemote(): Promise<boolean> {
+    if (!this.settings.gitRemoteUrl) return true;
+    const env = this.gitEnv();
+    const check = await this.execGit("git remote get-url origin", env);
+    if (check.ok) {
+      if (check.stdout === this.settings.gitRemoteUrl) return true;
+      const setUrl = await this.execGit(`git remote set-url origin ${this.settings.gitRemoteUrl}`, env);
+      if (!setUrl.ok) {
+        new Notice(`Failed to update remote: ${setUrl.stderr}`);
+        return false;
+      }
+      return true;
+    }
+    const add = await this.execGit(`git remote add origin ${this.settings.gitRemoteUrl}`, env);
+    if (!add.ok) {
+      new Notice(`Failed to add remote: ${add.stderr}`);
+      return false;
+    }
+    return true;
+  }
+
+  private async gitPush(): Promise<boolean> {
+    const env = this.gitEnv();
+    const result = await this.execGit("git push", env);
+    if (result.ok) {
+      new Notice(t("notice.gitPushSuccess"));
+      return true;
+    }
+    new Notice(t("notice.gitPushFailed", { message: result.stderr }));
+    return false;
+  }
+
   private async tryGitCommit(plan: import("./types").ChangePlan): Promise<void> {
-    if (!this.settings.gitAutoCommit) return;
+    if (this.settings.gitMode === "none") return;
     try {
+      if (!(await this.ensureGitRepo())) return;
+      if (this.settings.gitMode === "remote") {
+        if (!(await this.ensureRemote())) return;
+      }
       const message = templateEngine.buildGitCommitMessage(this.settings, {
         summary: plan.summary,
         operationCount: plan.operations.length
       });
-      await this.gitCommit(message);
-    } catch {
-      // Git commit failures don't block the flow.
+      const wikiFolder = this.settings.wikiFolder;
+      const env = this.gitEnv();
+      const result = await this.execGit(`git add "${wikiFolder}" && git commit -m "${message.replace(/"/g, '\\"')}"`, env);
+      if (result.ok) {
+        new Notice(t("notice.gitCommitted"));
+      } else if (result.stderr.includes("nothing to commit")) {
+        return;
+      } else {
+        new Notice(`Git commit failed: ${result.stderr}`);
+        return;
+      }
+      if (this.settings.gitMode === "remote" && this.settings.gitAutoPush) {
+        await this.gitPush();
+      }
+    } catch (e) {
+      new Notice(`Git error: ${e}`);
     }
   }
 
-  private async gitCommit(message: string): Promise<void> {
-    if (typeof (window as unknown as { require?: (module: string) => unknown }).require === "undefined") return;
-    const childProcess = (window as unknown as { require: (module: string) => { exec: (cmd: string, options: unknown, callback: (err: unknown, stdout: string, stderr: string) => void) => unknown } }).require("child_process");
-    const vaultPath = (this.app.vault.adapter as { getBasePath?: () => string }).getBasePath?.() ?? "";
-    if (!vaultPath) return;
-    const wikiFolder = this.settings.wikiFolder;
-    await new Promise<void>((resolve) => {
-      childProcess.exec(`git add "${wikiFolder}" && git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: vaultPath }, () => resolve());
+  private async pushWikiCommand(): Promise<void> {
+    if (this.settings.gitMode === "none") {
+      new Notice(t("notice.gitNotEnabled"));
+      return;
+    }
+    new Notice(t("notice.gitPushing"));
+    await this.gitPush();
+  }
+
+  private gitEnv(): Record<string, string> | undefined {
+    if (this.settings.gitMode !== "remote") return undefined;
+    if (this.settings.gitRemoteMethod !== "ssh-keygen") return undefined;
+    if (!this.settings.gitSshKeyPath) return undefined;
+    return { GIT_SSH_COMMAND: `ssh -i "${this.settings.gitSshKeyPath}" -o StrictHostKeyChecking=accept-new` };
+  }
+
+  async generateSshKey(): Promise<void> {
+    if (typeof (window as unknown as { require?: (module: string) => unknown }).require === "undefined") {
+      new Notice("Electron require not available");
+      return;
+    }
+    try {
+      const os = (window as unknown as { require: (module: string) => { homedir: () => string } }).require("os");
+      const path = (window as unknown as { require: (module: string) => { join: (...segments: string[]) => string } }).require("path");
+      const fs = (window as unknown as { require: (module: string) => { existsSync: (p: string) => boolean; readFileSync: (p: string, enc: string) => string } }).require("fs");
+      const childProcess = (window as unknown as { require: (module: string) => { exec: (cmd: string, cb: (err: unknown, stdout: string, stderr: string) => void) => unknown } }).require("child_process");
+      const keyPath = path.join(os.homedir(), ".ssh", "auto-llm-wiki_ed25519");
+      if (fs.existsSync(keyPath)) {
+        new Notice(t("notice.gitSshKeyExists", { path: keyPath }));
+        this.settings = { ...this.settings, gitSshKeyPath: keyPath };
+        await this.saveSettings();
+        return;
+      }
+      await new Promise<void>((resolve, reject) => {
+        childProcess.exec(`ssh-keygen -t ed25519 -C "auto-llm-wiki" -f "${keyPath}" -N ""`, (err: unknown, _stdout: string, stderr: string) => {
+          if (err) { reject(new Error((stderr || "").trim() || "ssh-keygen failed")); return; }
+          resolve();
+        });
+      });
+      this.settings = { ...this.settings, gitSshKeyPath: keyPath };
+      await this.saveSettings();
+      new Notice(t("notice.gitSshKeyGenerated"));
+    } catch (e) {
+      new Notice(`SSH key generation failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  private async githubApi(path: string, opts?: { method?: string; body?: unknown }): Promise<{ ok: boolean; status: number; json: unknown }> {
+    const token = this.settings.gitHubToken;
+    const response = await requestUrl({
+      url: `https://api.github.com${path}`,
+      method: opts?.method ?? "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json"
+      },
+      body: opts?.body ? JSON.stringify(opts.body) : undefined
     });
+    return { ok: response.status >= 200 && response.status < 300, status: response.status, json: response.json };
+  }
+
+  async fetchGitHubUser(): Promise<string | null> {
+    try {
+      const result = await this.githubApi("/user");
+      if (result.ok) {
+        const data = result.json as { login: string };
+        return data.login ?? null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async checkGitHubRepo(owner: string, repo: string): Promise<boolean> {
+    try {
+      const result = await this.githubApi(`/repos/${owner}/${repo}`);
+      return result.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async createGitHubRepo(): Promise<string | null> {
+    try {
+      const user = await this.fetchGitHubUser();
+      if (!user) {
+        new Notice(t("notice.gitHubAccountFailed"));
+        return null;
+      }
+      const exists = await this.checkGitHubRepo(user, this.settings.gitHubRepoName);
+      if (exists) {
+        const url = `https://github.com/${user}/${this.settings.gitHubRepoName}`;
+        new Notice(t("notice.gitRepoExists"));
+        const remoteUrl = `https://${this.settings.gitHubToken}@github.com/${user}/${this.settings.gitHubRepoName}.git`;
+        this.settings = { ...this.settings, gitRemoteUrl: remoteUrl };
+        await this.saveSettings();
+        return url;
+      }
+      const result = await this.githubApi("/user/repos", {
+        method: "POST",
+        body: { name: this.settings.gitHubRepoName, private: true, auto_init: false }
+      });
+      if (result.ok) {
+        const data = result.json as { html_url: string };
+        const url = data.html_url ?? `https://github.com/${user}/${this.settings.gitHubRepoName}`;
+        const remoteUrl = `https://${this.settings.gitHubToken}@github.com/${user}/${this.settings.gitHubRepoName}.git`;
+        this.settings = { ...this.settings, gitRemoteUrl: remoteUrl };
+        await this.saveSettings();
+        new Notice(t("notice.gitRepoCreated", { url }));
+        return url;
+      }
+      const errData = result.json as { message?: string };
+      new Notice(t("notice.gitRepoCreateFailed", { message: errData.message ?? `HTTP ${result.status}` }));
+      return null;
+    } catch (e) {
+      new Notice(t("notice.gitRepoCreateFailed", { message: e instanceof Error ? e.message : String(e) }));
+      return null;
+    }
   }
 }
 
@@ -678,4 +879,14 @@ function migrateProviderSettings(settings: LLMWikiSettings): LLMWikiSettings {
     enabled: true
   }];
   return { ...settings, providers, activeProviderId: "default-openai" };
+}
+
+function migrateGitSettings(settings: LLMWikiSettings, data: Record<string, unknown>): LLMWikiSettings {
+  if (!("gitAutoCommit" in data)) return settings;
+  const gitAutoCommit = data["gitAutoCommit"];
+  delete data["gitAutoCommit"];
+  return {
+    ...settings,
+    gitMode: gitAutoCommit ? "local" : "none"
+  };
 }

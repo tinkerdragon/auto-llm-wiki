@@ -56,8 +56,14 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
   qdrantUrl: "",
   qdrantApiKey: "",
   qdrantCollection: "auto-llm-wiki",
-  gitAutoCommit: false,
-  gitCommitMessageTemplate: "Auto LLM Wiki: {{summary}}"
+  gitMode: "none" as const,
+  gitRemoteMethod: "ssh-manual" as const,
+  gitRemoteUrl: "",
+  gitAutoPush: false,
+  gitCommitMessageTemplate: "Auto LLM Wiki: {{summary}}",
+  gitHubToken: "",
+  gitHubRepoName: "",
+  gitSshKeyPath: ""
 };
 
 export type OperationType = "text" | "chat" | "vision";
@@ -149,10 +155,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
-    this.addToggleSetting(t("settings.gitAutoCommit.name"), t("settings.gitAutoCommit.desc"), "gitAutoCommit");
-    if (this.plugin.settings.gitAutoCommit) {
-      this.addTextSetting(t("settings.gitCommitMessageTemplate.name"), t("settings.gitCommitMessageTemplate.desc"), "gitCommitMessageTemplate");
-    }
+    this.addGitSettings();
     this.addConnectionTest();
   }
 
@@ -543,6 +546,152 @@ export class LLMWikiSettingTab extends PluginSettingTab {
       });
   }
 
+  private addGitSettings(): void {
+    const s = this.plugin.settings;
+    new Setting(this.containerEl)
+      .setName(t("settings.gitMode.name"))
+      .setDesc(t("settings.gitMode.desc"))
+      .addDropdown((dropdown) => {
+        dropdown.addOption("none", "Off");
+        dropdown.addOption("local", "Local only");
+        dropdown.addOption("remote", "Remote repository (SSH)");
+        dropdown.setValue(s.gitMode);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings = { ...this.plugin.settings, gitMode: value as "none" | "local" | "remote" };
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      });
+
+    if (s.gitMode === "local" || s.gitMode === "remote") {
+      this.addTextSetting(t("settings.gitCommitMessageTemplate.name"), t("settings.gitCommitMessageTemplate.desc"), "gitCommitMessageTemplate");
+    }
+
+    if (s.gitMode === "remote") {
+      new Setting(this.containerEl)
+        .setName(t("settings.gitRemoteMethod.name"))
+        .setDesc(t("settings.gitRemoteMethod.desc"))
+        .addDropdown((dropdown) => {
+          dropdown.addOption("ssh-manual", "SSH (manual setup)");
+          dropdown.addOption("ssh-keygen", "SSH (auto-generate key)");
+          dropdown.addOption("github-api", "GitHub (API token)");
+          dropdown.setValue(s.gitRemoteMethod);
+          dropdown.onChange(async (value) => {
+            this.plugin.settings = { ...this.plugin.settings, gitRemoteMethod: value as "ssh-manual" | "ssh-keygen" | "github-api" };
+            await this.plugin.saveSettings();
+            this.display();
+          });
+        });
+
+      if (s.gitRemoteMethod === "ssh-manual") {
+        this.addTextSetting(t("settings.gitRemoteUrl.name"), t("settings.gitRemoteUrl.desc"), "gitRemoteUrl");
+      }
+
+      if (s.gitRemoteMethod === "ssh-keygen") {
+        this.addSshKeygenSettings();
+        this.addTextSetting(t("settings.gitRemoteUrl.name"), t("settings.gitRemoteUrl.desc"), "gitRemoteUrl");
+      }
+
+      if (s.gitRemoteMethod === "github-api") {
+        this.addGitHubApiSettings();
+      }
+
+      new Setting(this.containerEl)
+        .setName(t("settings.gitAutoPush.name"))
+        .setDesc(t("settings.gitAutoPush.desc"))
+        .addToggle((toggle) => {
+          toggle.setValue(s.gitAutoPush);
+          toggle.onChange(async (value) => {
+            this.plugin.settings = { ...this.plugin.settings, gitAutoPush: value };
+            await this.plugin.saveSettings();
+          });
+        });
+    }
+  }
+
+  private addSshKeygenSettings(): void {
+    const s = this.plugin.settings;
+    if (!s.gitSshKeyPath) {
+      new Setting(this.containerEl)
+        .setName(t("settings.gitSshKeygen.name"))
+        .setDesc(t("settings.gitSshKeygen.desc"))
+        .addButton((button) => {
+          button.setButtonText(t("settings.gitSshKeygen.name"));
+          button.onClick(async () => {
+            await this.plugin.generateSshKey();
+            this.display();
+          });
+        });
+      return;
+    }
+
+    const keyContainer = this.containerEl.createDiv();
+    keyContainer.createEl("p", { text: t("settings.gitSshPublicKey.name") });
+    const textarea = keyContainer.createEl("textarea");
+    textarea.readOnly = true;
+    textarea.style.width = "100%";
+    textarea.style.height = "100px";
+    textarea.style.resize = "vertical";
+    try {
+      if (typeof (window as unknown as { require?: (module: string) => unknown }).require !== "undefined") {
+        const fs = (window as unknown as { require: (module: string) => { readFileSync: (path: string, encoding: string) => string } }).require("fs");
+        textarea.value = fs.readFileSync(s.gitSshKeyPath + ".pub", "utf-8").trim();
+      }
+    } catch {
+      textarea.value = "Unable to read public key.";
+    }
+    textarea.addEventListener("click", () => {
+      textarea.select();
+      void navigator.clipboard.writeText(textarea.value);
+      new Notice(t("notice.gitKeyCopied"));
+    });
+    keyContainer.createEl("p", { text: t("settings.gitSshPublicKey.desc"), cls: "setting-item-description" });
+  }
+
+  private addGitHubApiSettings(): void {
+    const s = this.plugin.settings;
+    this.addTextSetting(t("settings.gitHubToken.name"), t("settings.gitHubToken.desc"), "gitHubToken", true);
+    this.addTextSetting(t("settings.gitHubRepoName.name"), t("settings.gitHubRepoName.desc"), "gitHubRepoName");
+
+    if (!s.gitHubToken || !s.gitHubRepoName) return;
+
+    const statusContainer = this.containerEl.createDiv();
+    statusContainer.createEl("p", { text: t("settings.gitChecking") });
+
+    void (async () => {
+      try {
+        const user = await this.plugin.fetchGitHubUser();
+        if (!user) {
+          statusContainer.empty();
+          statusContainer.createEl("p", { text: t("notice.gitHubAccountFailed") });
+          return;
+        }
+        const exists = await this.plugin.checkGitHubRepo(user, s.gitHubRepoName);
+        statusContainer.empty();
+        statusContainer.createEl("p", { text: t("notice.gitHubAccountDetected", { username: user }) });
+        if (exists) {
+          statusContainer.createEl("p", { text: t("notice.gitRepoExists") });
+          statusContainer.createEl("p", { text: `https://github.com/${user}/${s.gitHubRepoName}` });
+        } else {
+          const createBtn = statusContainer.createEl("button");
+          createBtn.setText(t("settings.gitCreateRepo.name"));
+          createBtn.addEventListener("click", async () => {
+            createBtn.setAttr("disabled", "true");
+            try {
+              await this.plugin.createGitHubRepo();
+            } finally {
+              createBtn.removeAttribute("disabled");
+            }
+            this.display();
+          });
+        }
+      } catch {
+        statusContainer.empty();
+        statusContainer.createEl("p", { text: t("notice.gitHubAccountFailed") });
+      }
+    })();
+  }
+
   private addConnectionTest(): void {
     new Setting(this.containerEl)
       .setName(t("settings.testConnection.name"))
@@ -602,7 +751,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
       });
   }
 
-  private addToggleSetting(name: string, desc: string, key: keyof Pick<LLMWikiSettings, "autoIngestEnabled" | "gitAutoCommit">, isAutoIngest = false): void {
+  private addToggleSetting(name: string, desc: string, key: "autoIngestEnabled", isAutoIngest = false): void {
     new Setting(this.containerEl)
       .setName(name)
       .setDesc(desc)
