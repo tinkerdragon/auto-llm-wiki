@@ -29,7 +29,7 @@ export class OpenAIProvider extends BaseOpenAICompatibleProvider {
       return await this.completeMessages(
         request.apiKey, request.apiUrl || this.defaultApiUrl, request.model,
         [
-          { role: "system", content: "You are a careful Auto LLM Wiki maintainer. Return strict JSON only." },
+          { role: "system", content: "You are a careful ContextOS maintainer. Return strict JSON only." },
           { role: "user", content: request.prompt }
         ], true
       );

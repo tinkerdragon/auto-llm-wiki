@@ -610,7 +610,7 @@ ${p.content}`).join("\n\n");
 
   private async gitPush(): Promise<boolean> {
     const env = this.gitEnv();
-    const result = await this.execGit("git push", env);
+    const result = await this.execGit("git push origin HEAD", env);
     if (result.ok) {
       new Notice(t("notice.gitPushSuccess"));
       return true;
@@ -675,7 +675,7 @@ ${p.content}`).join("\n\n");
       const path = (window as unknown as { require: (module: string) => { join: (...segments: string[]) => string } }).require("path");
       const fs = (window as unknown as { require: (module: string) => { existsSync: (p: string) => boolean; readFileSync: (p: string, enc: string) => string } }).require("fs");
       const childProcess = (window as unknown as { require: (module: string) => { exec: (cmd: string, cb: (err: unknown, stdout: string, stderr: string) => void) => unknown } }).require("child_process");
-      const keyPath = path.join(os.homedir(), ".ssh", "auto-llm-wiki_ed25519");
+      const keyPath = path.join(os.homedir(), ".ssh", "contextos_ed25519");
       if (fs.existsSync(keyPath)) {
         new Notice(t("notice.gitSshKeyExists", { path: keyPath }));
         this.settings = { ...this.settings, gitSshKeyPath: keyPath };
@@ -683,7 +683,7 @@ ${p.content}`).join("\n\n");
         return;
       }
       await new Promise<void>((resolve, reject) => {
-        childProcess.exec(`ssh-keygen -t ed25519 -C "auto-llm-wiki" -f "${keyPath}" -N ""`, (err: unknown, _stdout: string, stderr: string) => {
+        childProcess.exec(`ssh-keygen -t ed25519 -C "contextos" -f "${keyPath}" -N ""`, (err: unknown, _stdout: string, stderr: string) => {
           if (err) { reject(new Error((stderr || "").trim() || "ssh-keygen failed")); return; }
           resolve();
         });
@@ -696,20 +696,45 @@ ${p.content}`).join("\n\n");
     }
   }
 
+  async testGitConnection(): Promise<void> {
+    const check = await this.execGit("git --version");
+    if (!check.ok) {
+      new Notice(t("notice.gitNotInstalled"));
+      return;
+    }
+    if (this.settings.gitMode === "remote" && this.settings.gitRemoteUrl) {
+      const env = this.gitEnv();
+      const result = await this.execGit(`git ls-remote ${this.settings.gitRemoteUrl}`, env);
+      if (result.ok) {
+        new Notice(t("notice.gitConnectionSucceeded"));
+      } else {
+        new Notice(t("notice.gitConnectionFailed", { message: result.stderr }));
+      }
+    } else if (this.settings.gitMode === "remote") {
+      new Notice("No remote URL configured.");
+    } else {
+      new Notice(t("notice.gitConnectionSucceeded"));
+    }
+  }
+
   private async githubApi(path: string, opts?: { method?: string; body?: unknown }): Promise<{ ok: boolean; status: number; json: unknown }> {
     const token = this.settings.gitHubToken;
-    const response = await requestUrl({
-      url: `https://api.github.com${path}`,
-      method: opts?.method ?? "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json"
-      },
-      body: opts?.body ? JSON.stringify(opts.body) : undefined
-    });
-    return { ok: response.status >= 200 && response.status < 300, status: response.status, json: response.json };
+    try {
+      const response = await requestUrl({
+        url: `https://api.github.com${path}`,
+        method: opts?.method ?? "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json"
+        },
+        body: opts?.body ? JSON.stringify(opts.body) : undefined
+      });
+      return { ok: response.status >= 200 && response.status < 300, status: response.status, json: response.json };
+    } catch (e) {
+      return { ok: false, status: (e as { status?: number }).status ?? 0, json: { message: (e as Error).message } };
+    }
   }
 
   async fetchGitHubUser(): Promise<string | null> {
@@ -764,7 +789,11 @@ ${p.content}`).join("\n\n");
         return url;
       }
       const errData = result.json as { message?: string };
-      new Notice(t("notice.gitRepoCreateFailed", { message: errData.message ?? `HTTP ${result.status}` }));
+      let errorMsg = errData.message ?? `HTTP ${result.status}`;
+      if (result.status === 403 || result.status === 401) {
+        errorMsg = `${errorMsg}. Ensure your GitHub token has the "repo" scope enabled.`;
+      }
+      new Notice(t("notice.gitRepoCreateFailed", { message: errorMsg }));
       return null;
     } catch (e) {
       new Notice(t("notice.gitRepoCreateFailed", { message: e instanceof Error ? e.message : String(e) }));

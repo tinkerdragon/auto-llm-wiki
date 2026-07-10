@@ -62,7 +62,7 @@ export interface LLMWikiSettings {
   qdrantCollection: string;
   // Git integration
   gitMode: "none" | "local" | "remote";
-  gitRemoteMethod: "ssh-manual" | "ssh-keygen" | "github-api";
+  gitRemoteMethod: "ssh-manual" | "ssh-keygen";
   gitRemoteUrl: string;
   gitAutoPush: boolean;
   gitCommitMessageTemplate: string;

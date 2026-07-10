@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 (2026-07-10)
+
+### Added
+- **Git integration**: Auto-commit wiki changes to a local or remote (SSH) git repository after each change plan is applied. Supports manual SSH setup and auto-generated Ed25519 keypairs.
+- **Git connection test**: Test connectivity to the configured git remote directly from settings, with auto-test on URL entry (debounced).
+- **Git as standalone settings section**: Git settings moved out of Advanced into their own section.
+
+### Fixed
+- Git push now uses `origin HEAD` explicitly to avoid "No configured push destination" errors on fresh repos.
+- GitHub API error handling improved to surface token permission guidance on 403/401 responses.
+
 ## 0.2.0 (2026-07-09)
 
 ### Added
